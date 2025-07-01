@@ -62,7 +62,7 @@ class CamPublisher(Node):
             if dur >= 2.0:     # Calculate the fps every ~2 seconds
                 fps = frame_count / dur
                 if fps < 50.0:
-                    print(f"WARNING: Slow processing: {fps:0.2f} fps")
+                    print(f"WARNING: Slow image generation: {fps:0.2f} fps")
 
                 # Reset our count
                 frame_count = 0
