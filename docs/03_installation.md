@@ -109,12 +109,12 @@ pip install --upgrade jax                 # If you only have a CPU (e.g., on a v
 ```
 
 > **Optional**: You can check whether JAX can access your GPU with:
->> ```
->> python
->> import jax
->> jax.devices()   # Should return a CUDA device if GPU is available
->> exit()
->> ```
+> ```
+> python
+> import jax
+> jax.devices()   # Should return a CUDA device if GPU is available
+> exit()
+> ```
 
 ```
 pip install -e src/STAC_CyberRunner/dreamerv3
