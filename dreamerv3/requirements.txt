@@ -1,6 +1,6 @@
 cloudpickle
 crafter
-gym==0.19.0
+gym==0.25.2
 jax
 jaxlib
 numpy
