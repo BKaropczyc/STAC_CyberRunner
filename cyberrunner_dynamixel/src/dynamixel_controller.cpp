@@ -47,7 +47,7 @@ int dynamixel_init(const char* port, int num_dynamixel, int* dynamixel_ids, int 
         char device[10];
         char cmd[256];
         sscanf(port, "/dev/%s", device);
-        sprintf(cmd, "echo 1 | sudo tee /sys/bus/usb-serial/devices/%s/latency_timer", device);
+        sprintf(cmd, "sudo /usr/local/sbin/set_usb_latency.sh %s", device);
         printf("Executing command: %s\n", cmd);
         system(cmd);
 
