@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- args that can be set from the command line or a default will be used -->
+  <arg name="video_dev" default="/dev/video0" />
+  <arg name="servo_dev" default="/dev/ttyUSB0" />
+  
+  <!-- Nodes to launch for training -->
+  <node pkg="cyberrunner_camera" exec="cam_publisher.py" args="$(var video_dev)" name="camera" output="screen" launch-prefix="gnome-terminal -- " />
+  <node pkg="cyberrunner_state_estimation" exec="estimator_sub" name="state_estimation" output="screen" launch-prefix="gnome-terminal -- " />
+  <node pkg="cyberrunner_dynamixel" exec="cyberrunner_dynamixel" args="$(var servo_dev)" name="dynamixel" output="screen" launch-prefix="gnome-terminal -- " />
+  <node pkg="cyberrunner_dreamer" exec="train" name="train" output="screen" launch-prefix="gnome-terminal -- " />
+</launch>
+
