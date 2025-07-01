@@ -3,3 +3,4 @@ cmake-build-debug
 __pycache__
 *.egg-info
 site/
+.DS_Store
