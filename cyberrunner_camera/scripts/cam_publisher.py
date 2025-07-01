@@ -15,46 +15,49 @@ class CamPublisher(Node):
         self.publisher = self.create_publisher(Image, "cyberrunner_camera/image", 1)
         self.br = CvBridge()
         self.cap = cv2.VideoCapture(device)
-        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc("U", "Y", "V", "Y"))
-        # self.cap.set(cv2.CAP_PROP_MODE, cv2.CAP_FFMPEG)
-        # self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+
+        # Setup the video capture settings
+        # self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc("U", "Y", "V", "Y"))
+        self.cap.set(cv2.CAP_PROP_MODE, cv2.CAP_FFMPEG)
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
         self.cap.set(cv2.CAP_PROP_FPS, 60)  # 60
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # 1280
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # 720
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 10)
 
+        # Read in a few images to start
         for _ in range(3):
             self.cap.read()
 
         previous = time.time()
-        count = 0
         while True:
+            # Read in the next image
             ret, frame = self.cap.read()
-            t0 = time.time()
             if not ret:
                 print("Failed to obtain camera image")
                 exit()
 
+            # Resize the image and add a border to the top & bottom
             frame = cv2.resize(frame, (640, 360))
             frame = cv2.copyMakeBorder(frame, 20, 20, 0, 0, cv2.BORDER_CONSTANT, 0)
-            now = time.time()
-            dur = now - previous
-            if dur > 0.02:
-                print("publish image: {}".format(now - previous))
-            previous = now
+
+            # Publish this image message
             msg = self.br.cv2_to_imgmsg(frame)
             self.publisher.publish(msg)
 
+            # Display the image, if needed
             debug = True
             if debug:
-
                 cv2.imshow("img", frame)  # cv2.resize(frame, (160, 100)))
                 cv2.waitKey(1)
-            t1 = time.time()
-            if dur > 0.02:
-                print("Processing: {}".format(t1 - t0))
 
-            count += 1
+            # Check the image processing speed
+            now = time.time()
+            dur = now - previous
+            if dur > 0.02:
+                print(f"WARNING: Slow processing: {1 / dur:0.2f} fps")
+            previous = now
+
 
     def cap(self):
         pass
