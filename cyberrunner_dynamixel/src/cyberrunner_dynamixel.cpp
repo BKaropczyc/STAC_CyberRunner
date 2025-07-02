@@ -14,6 +14,7 @@
 #include "cyberrunner_dynamixel/dynamixel_controller.h"
 #include "cyberrunner_interfaces/msg/dynamixel_vel.hpp"
 #include "cyberrunner_interfaces/srv/dynamixel_reset.hpp"
+#include "cyberrunner_interfaces/srv/dynamixel_test.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 
@@ -84,6 +85,66 @@ void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixe
     response->success = 1;
 }
 
+//Service to test the dynamixel servos to make sure the servos are firmly connected to the shaft
+void test_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::DynamixelTest::Request>,
+          std::shared_ptr<cyberrunner_interfaces::srv::DynamixelTest::Response> response)
+{
+    int32_t dynamixel_ids[2];
+    int32_t moving_speeds[2];
+
+    // Dynamixel ids
+    dynamixel_ids[0] = DYNAMIXEL_ID_1;
+    dynamixel_ids[1] = DYNAMIXEL_ID_2;
+  
+    // Reset motors  TODO: return not 0 if failed
+    int result = dynamixel_init(port, 2, dynamixel_ids, 1000000, 50, (uint32_t*)positions); 
+    if (result != 0){
+       response->success = result;
+       return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    
+    // Moving speeds from message
+    for (int i=0; i<=5;i++){
+        moving_speeds[0] = 100;
+        moving_speeds[1] = 0;
+        dynamixel_step(2, dynamixel_ids, moving_speeds);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        
+        moving_speeds[0] = -100;
+        moving_speeds[1] = 0;
+        dynamixel_step(2, dynamixel_ids, moving_speeds);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+    moving_speeds[0] = 100;
+    moving_speeds[1] = 0;
+    dynamixel_step(2, dynamixel_ids, moving_speeds);
+    std::this_thread::sleep_for(std::chrono::milliseconds(125));
+    
+    for (int i=0; i<=5;i++){
+        moving_speeds[0] = 0;
+        moving_speeds[1] = 100;
+        dynamixel_step(2, dynamixel_ids, moving_speeds);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        
+        moving_speeds[0] = 0;
+        moving_speeds[1] = -100;
+        dynamixel_step(2, dynamixel_ids, moving_speeds);
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+    moving_speeds[0] = 0;
+    moving_speeds[1] = 100;
+    dynamixel_step(2, dynamixel_ids, moving_speeds);
+    std::this_thread::sleep_for(std::chrono::milliseconds(125));   
+    
+    moving_speeds[0] = 0;
+    moving_speeds[1] = 0;
+    dynamixel_step(2, dynamixel_ids, moving_speeds);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    response->success = 1;
+}
+
 
 int main(int argc, char** argv)
 {
@@ -99,11 +160,13 @@ int main(int argc, char** argv)
     dynamixel_ids[0] = DYNAMIXEL_ID_1;
     dynamixel_ids[1] = DYNAMIXEL_ID_2;
     dynamixel_init(port, 2, dynamixel_ids, 1000000, 256, (uint32_t*)positions);  //TODO make param file
-
+    
+    // Creates an ROS Node
     rclcpp::NodeOptions options;
     rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared("cyberrunner_dynamixel", options);
     rclcpp::Subscription<cyberrunner_interfaces::msg::DynamixelVel>::SharedPtr sub = node->create_subscription<cyberrunner_interfaces::msg::DynamixelVel>("cyberrunner_dynamixel/cmd", 1, &set_dynamixel_speed);
     rclcpp::Service<cyberrunner_interfaces::srv::DynamixelReset>::SharedPtr service = node->create_service<cyberrunner_interfaces::srv::DynamixelReset>("cyberrunner_dynamixel/reset", &reset_dynamixel);
+    rclcpp::Service<cyberrunner_interfaces::srv::DynamixelTest>::SharedPtr test_service = node->create_service<cyberrunner_interfaces::srv::DynamixelTest>("cyberrunner_dynamixel/test", &test_dynamixel);
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;

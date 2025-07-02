@@ -28,6 +28,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/StateEstimate.msg"
   "msg/StateEstimateSub.msg"
   "srv/DynamixelReset.srv"
+  "srv/DynamixelTest.srv"
   DEPENDENCIES sensor_msgs
 )
 
