@@ -85,7 +85,7 @@ void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixe
     response->success = 1;
 }
 
-//Service to test the dynamixel servos to make sure the servos are firmly connected to the shaft
+// Service to test the dynamixel servos to make sure the servos are firmly connected to the shaft
 void test_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::DynamixelTest::Request>,
           std::shared_ptr<cyberrunner_interfaces::srv::DynamixelTest::Response> response)
 {
@@ -96,15 +96,15 @@ void test_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixel
     dynamixel_ids[0] = DYNAMIXEL_ID_1;
     dynamixel_ids[1] = DYNAMIXEL_ID_2;
   
-    // Reset motors  TODO: return not 0 if failed
+    // Reset motors
     int result = dynamixel_init(port, 2, dynamixel_ids, 1000000, 50, (uint32_t*)positions); 
     if (result != 0){
-       response->success = result;
+       response->success = 0;
        return;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
-    // Moving speeds from message
+    // Wiggle each servo back and forth several times
     for (int i=0; i<=5;i++){
         moving_speeds[0] = 100;
         moving_speeds[1] = 0;
@@ -135,8 +135,9 @@ void test_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixel
     moving_speeds[0] = 0;
     moving_speeds[1] = 100;
     dynamixel_step(2, dynamixel_ids, moving_speeds);
-    std::this_thread::sleep_for(std::chrono::milliseconds(125));   
-    
+    std::this_thread::sleep_for(std::chrono::milliseconds(125));
+
+    // Stop the servos
     moving_speeds[0] = 0;
     moving_speeds[1] = 0;
     dynamixel_step(2, dynamixel_ids, moving_speeds);
