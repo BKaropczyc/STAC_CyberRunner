@@ -119,6 +119,9 @@ pip install --upgrade jax                 # If you only have a CPU (e.g., on a v
 ```
 pip install -e src/STAC_CyberRunner/dreamerv3
 ```
+```
+pip install pygame
+```
 
 ## Install ROS dependencies
 ```
