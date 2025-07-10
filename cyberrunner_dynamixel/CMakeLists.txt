@@ -47,6 +47,7 @@ install(TARGETS
 # Install Python executables
 install(PROGRAMS
   scripts/pantilt.py
+  scripts/joystick.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
