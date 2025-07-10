@@ -66,19 +66,20 @@ class Anim3d:
 
     def update_anim(self):
 
-        self.fig.canvas.restore_region(self.background)
+        # self.fig.canvas.restore_region(self.background)
 
         # vertices = np.random.rand(4,3)/10
         vertices = [list(self.maze_corners__W)]
         self.plate_collection.set_verts(vertices)
         self.plate_collection.do_3d_projection()
 
-        self.ball_plot.set_data(self.B__W[0], self.B__W[1])
+        self.ball_plot.set_data(self.B__W[0:1], self.B__W[1:2])
         self.ball_plot.set_3d_properties(self.B__W[2])
 
         self.ax.draw_artist(self.ball_plot)
         self.ax.draw_artist(self.plate_collection)
         self.fig.canvas.blit(self.ax.bbox)
+        plt.pause(0.00000001)
 
     def get_camera_pyramid(
         self, extrinsic, color="r", focal_len_scaled=5, aspect_ratio=1
