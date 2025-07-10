@@ -3,9 +3,9 @@
 
 import cv2
 import numpy as np
+from rclpy.impl import rcutils_logger
 
-
-from cyberrunner_state_estimation.core.detection import Detector, DetectorFixedPts
+from cyberrunner_state_estimation.core.detection import Detector
 from cyberrunner_state_estimation.core.plate_pose import PlatePoseEstimator
 from cyberrunner_state_estimation.utils.anim_3d import Anim3d
 from cyberrunner_state_estimation.utils.divers import init_win_subimages
@@ -16,9 +16,7 @@ class Measurements:
         self, markers, do_anim_3d=True, viewpoint="side", show_subimages_detector=False
     ):
         self.detector = Detector(markers[4:], show_subimages=show_subimages_detector)
-        self.detector_fixed_points = DetectorFixedPts(
-            markers[:4], show_subimages=show_subimages_detector
-        )
+        self.detector_fixed_points = Detector(markers[:4], markers_are_static=True, show_subimages=show_subimages_detector)
         self.plate_pose = PlatePoseEstimator()
 
         self.plate_angles = (None, None)
@@ -149,6 +147,15 @@ class Measurements:
         Compute the pose of the camera {c} wrt to the world frame {w} : T__W_C.
         """
         fix_pts = self.detector_fixed_points.detect_corners(frame)
+
+        # Make sure all corners were found, otherwise we can't continue
+        corners_found = self.detector_fixed_points.corners_found
+        if not all(corners_found):
+            log_message = f"Camera localization failed: Could not detect all outer corners.\nCorners found: {corners_found}"
+            logger = rcutils_logger.RcutilsLogger(name="Measurements")
+            logger.fatal(log_message)
+            exit(1)
+
         self.detector.fixed_corners = fix_pts
         self.plate_pose.camera_localization(fix_pts)
         self.create_mask(frame)

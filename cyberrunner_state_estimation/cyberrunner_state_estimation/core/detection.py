@@ -1,99 +1,307 @@
 import numpy as np
+from math import ceil
 import cv2
-
-colors = [(255, 0, 255), (0, 255, 0), (0, 0, 255), (0, 255, 255)]
-c_name = ["blue", "green", "red", "yellow"]
-
 from cyberrunner_state_estimation.core import gaussian_robust, masking
 
 
-# from profileFIle import profile
 class Detector:
+    """
+    A class for detecting the location of the ball and the board corners within an image.
+    Location coordinates are measured in pixels as (row, column).
+    """
 
-    DEFAULT_HSV_CORNERS = (
-        (43, 140),  # (minHue, maxHue)
+    # Set SHOW_REGIONS to True to display the cropping regions for easier debugging.
+    # This setting should not be used for production work since drawing the cropping region
+    # rectangles could impact the detection routines.
+    SHOW_REGIONS = False
+
+    # Parameters for detecting the markers placed on the corners of the board
+    CORNERS_CROP_SIZE_SMALL = 22   # The side length of the cropping square when detecting corners
+    CORNERS_CROP_SIZE_LARGE = 50   # The crop size to use when the current position of a corner is unknown
+    CORNERS_HSV_RANGES = (         # Masking parameters used when detecting corners
+        (43, 140),   # (minHue, maxHue)
         (125, 255),  # (minSat, maxSat)
-        (9, 255),
-    )  # (minVal, maxVal)
-    DEFAULT_Q_CORNERS = 5  # gaussian detection param -> q-th quentile
-    DEFAULT_TH_CORNERS = 0.002  # gaussian detection threshold
+        (9, 255)     # (minVal, maxVal)
+    )
+    CORNERS_PERCENTILE = 5        # Gaussian detection q-th percentile
+    CORNERS_THRESHOLD = 0.002     # Gaussian detection threshold
 
-    DEFAULT_HSV_BALL = (
-        (89, 121),  # (minHue, maxHue)
-        (172, 255),  # (minSat, maxSat)
-        (21, 255),
-    )  # (minVal, maxVal)
-    DEFAULT_Q_BALL = 6  # gaussian detection param -> q-th quentile
-    DEFAULT_TH_BALL = 10 ** (-4)  # gaussian detection threshold
-
-    DEFAULT_SIZE_CROP_CORNERS = 65 / 3
-    DEFAULT_SIZE_CROP_BALL = 150 / 3
-
-    DEFAULT_INIT_BALL_POS = np.array([47, 330])  # np.array([55,485])
+    # Parameters for detecting the ball
+    BALL_CROP_SIZE = 50           # The side length of the cropping square when detecting the ball
+    BALL_HSV_RANGES = (           # Masking parameters used when detecting the ball
+        (89, 121),   # (minHue, maxHue)
+        (120, 255),  # (minSat, maxSat)
+        (21, 255)    # (minVal, maxVal)
+    )
+    BALL_PERCENTILE = 6           # Gaussian detection q-th percentile
+    BALL_THRESHOLD = 10 ** (-4)   # Gaussian detection threshold
 
     def __init__(
         self,
-        markers,
-        hsv_params_corners: list = DEFAULT_HSV_CORNERS,
-        q_corners: float = DEFAULT_Q_CORNERS,
-        th_corners: float = DEFAULT_TH_CORNERS,
-        hsv_params_ball: list = DEFAULT_HSV_BALL,
-        q_ball: float = DEFAULT_Q_BALL,
-        th_ball: float = DEFAULT_TH_BALL,
-        ball_init_pos: np.ndarray = DEFAULT_INIT_BALL_POS,
-        corner_subimage_half_size=25,
-        show_subimages=False,
+        markers,                    # Initial locations of the 4 markers on the board corners, when level
+        markers_are_static=False,   # Whether the markers are the static (outer) dots, vs. the moveable (inner) dots
+        show_subimages=False,       # Whether to display the cropped subimage masks during detection
     ):
-
-        self.hsv_params_corners = hsv_params_corners
-        self.q_corners = q_corners
-        self.th_corners = th_corners
-        self.hsv_params_ball = hsv_params_ball
-        self.q_ball = q_ball
-        self.th_ball = th_ball
-
-        self.ball_pos = None
-        self.corners = None
+        # Store parameters in our instance vars
+        self.markers = markers[:, ::-1].astype(int)     # Convert from (horizontal, vertical) coords to (row, column)
+        self.markers_are_static = markers_are_static
         self.show_subimages = show_subimages
 
-        self.corners_missing = True
+        # Initialize to no known ball or corner positions
+        self.ball_pos = None
+        self.is_ball_found = False          # Whether the ball position was successfully detected in the most recent frame
+        self.corners = None                 # The current positions of the 4 corner markers identified by 'markers'
+        self.corners_found = [False] * 4    # Whether each of the 4 corners was successfully detected in the most recent frame
+        self.fixed_corners = None           # The positions of the 4 outer markers on the board that don't move
+                                            # NOTE: This is set externally by using a second Detector object
 
-        self.fixed_corners = None
-        self.is_ball_found = False
+        # Set up the default coordinates for the ball subimage, when the ball was not detected
+        # Since the ball could be anywhere, these default coordinates will be the entire board:
+        self.full_board_coords = (self.markers[3], self.markers[1])    # (Upper Left marker, Lower Right marker)
 
-        self.corner_subimage_half_size = corner_subimage_half_size
-        corners = np.repeat(
-            np.expand_dims(np.asarray(markers)[:, ::-1], axis=1), 2, axis=1
-        )
-        corners[:, 0] -= self.corner_subimage_half_size
-        corners[:, 1] += self.corner_subimage_half_size
-        self.default_coords_subimages_corners = corners.astype(int)
-        self.default_coords_subimage_ball = (
-            self.default_coords_subimages_corners[3, 0],
-            self.default_coords_subimages_corners[1, 1],
-        )
-
-    # @profile(sort_by='cumulative', lines_to_print=10, strip_dirs=True)
     def process_frame(self, frame):
         """
         Process frame to get raw image coordinates of the four corners and the ball.
+        This is the primary method called by users of a Detector object.
 
         Args :
-            frame: np.ndarray, dim: (400, 640)
+            frame: np.ndarray, dim: (400, 640, 3)
+
         Returns :
             corners: np.ndarray, dim: (4,2)
-                     the raw image coordinates of the four corners dots in (x,y) = (line, column) convention.
+                     the raw image coordinates of the four corner dots in (row, column) convention.
             ball: np.ndarray, dim: (2,)
-                     the raw image coordinates of the ball in (x,y) = (line, column) convention.
+                     the raw image coordinates of the ball in (row, column) convention.
         """
 
         corners = self.detect_corners(frame)
-        ball = self.detect_ball(frame, show_rectangle=True)
-        return corners, ball  # both in (x,y) conventions
+        ball = self.detect_ball(frame)
 
-    def get_cropped(self, im: np.ndarray, pos: np.ndarray, h_p: float, w_p: float):
+        if Detector.SHOW_REGIONS:
+            # Display the final frame with the regions drawn on it
+            cv2.imshow("Detector", frame)
+            cv2.waitKey(1)
+
+        return corners, ball    # Both in (row, column) conventions
+
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Corner Detection
+    # ----------------------------------------------------------------------------------------------------------------------
+
+    def detect_corners(self, frame):
+        """Determine the coordinates of the 4 corners of the board"""
+
+        # Initialize all coordinates with zeros
+        corners = np.zeros(shape=(4, 2), dtype="float32")
+        corners_found = [False] * 4
+
+        # Get cropped subimages and coordinates for each of the corners.
+        cropped_corners_imgs, corners_imgs_coords = self.get_corner_subimages(frame)
+
+        # From these cropped subimages, attempt to find the coordinates of each corner
+        for i, sub_im in enumerate(cropped_corners_imgs):
+            corners[i, :], corners_found[i] = self.detect_corner(sub_im, i, corners_imgs_coords[i][0])
+
+        # Store and return the corner coordinates
+        self.corners = corners
+        self.corners_found = corners_found
+
+        return corners
+
+    def get_corner_subimages(self, im: np.ndarray):
         """
-        Return cropped image and its top-left and down-right corners coordinates in the given image.
+        Return cropped subimages and cropping coordinates for all 4 corners.
+        If we know the current location of a corner, we'll use it to crop and predict the new location.
+        Otherwise, we'll use a default cropping region based on the original 'marker' positions.
+
+         Args:
+             im: np.ndarray
+                 image
+         Returns:
+             An array of cropped corner subimages
+             and a corresponding array of corner cropping coordinates
+        """
+
+        # Prepare to collect subimages and cropping coordinates for all 4 corners
+        sub_imgs = []
+        sub_coords = []
+
+        # For each corner...
+        for i in range(4):
+            # If we detected this corner during the previous frame...
+            if self.corners_found[i]:
+                # ... use that location as the center of the crop
+                sub_img, ul, lr = self.get_cropped(im, self.corners[i, :], Detector.CORNERS_CROP_SIZE_SMALL)
+            else:
+                # Otherwise, use the original 'marker' position as the center of the crop
+                crop_size = Detector.CORNERS_CROP_SIZE_SMALL if self.markers_are_static else Detector.CORNERS_CROP_SIZE_LARGE
+                sub_img, ul, lr = self.get_cropped(im, self.markers[i, :], crop_size)
+
+            # Add the results for this corner
+            sub_imgs.append(sub_img)
+            sub_coords.append((ul, lr))
+
+            if Detector.SHOW_REGIONS:
+                # Draw the cropping rectangle on the image
+                cv2.rectangle(im, ul[::-1], lr[::-1], color=(0, 0, 255), thickness=1)
+
+        # Return the results
+        return sub_imgs, sub_coords
+
+    def detect_corner(self, sub_im: np.ndarray, i: int, coords_ul_sub_im: np.ndarray):
+        # Mask the subimage using the HSV values for the corners
+        _, mask = masking.mask_hsv(sub_im, Detector.CORNERS_HSV_RANGES)
+
+        # Try to find the center of the object in the mask
+        c_local, found = gaussian_robust.detect_gaussian(
+            mask, i, Detector.CORNERS_PERCENTILE, Detector.CORNERS_THRESHOLD, show_sub=self.show_subimages
+        )
+
+        # Calculate the coordinates of the detected object and return them
+        c = (coords_ul_sub_im + c_local).astype("float32")
+        return c, found
+
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Ball Detection
+    # ----------------------------------------------------------------------------------------------------------------------
+
+    def detect_ball(
+        self,
+        im: np.ndarray,
+        mask_corner=True,
+        mask_initial=True,
+    ):
+        """
+        Detect and return the position of the ball in the image.
+        If the position of the ball cannot be detected, set is_ball_found to False and return NaN's
+        Args:
+            im: np.ndarray
+                The image
+            mask_corner: bool
+                Whether to try to hide the corner markers if the ball gets close to a corner
+                This prevents the corner markers from being mistaken as the ball
+            mask_initial: bool
+                Whether to try to hide all corner markers when the ball was not detected in the previous frame
+                This prevents from the corner markers from being mistaken as the ball
+
+        Returns:
+             The position of the ball as an ndarray (row, column)
+             or an array of NaN's if the position ball could not be determined.
+        """
+        # If we detected the ball in the previous frame...
+        if self.is_ball_found:
+            if mask_corner:
+                # If the ball is near a corner...
+                ball_corner = self.is_ball_in_corner()
+                if ball_corner is not None:
+                    # Draw a red circle over the corner's markers to avoid mistakenly detecting them as the ball
+                    self.draw_marker_mask(im, self.corners[ball_corner, :])
+                    self.draw_marker_mask(im, self.fixed_corners[ball_corner, :])
+
+            # Get a cropped subimage based on the ball's most recent location
+            ball_subimg, subimg_ul_coords = self.predictive_cropping_ball(im)
+
+        else:
+            # We didn't detect the ball in the previous frame
+            if mask_initial:
+                # Hide the markers in all 4 corners to avoid mistakenly detecting them as the ball
+                for i in range(4):
+                    self.draw_marker_mask(im, self.corners[i, :])
+                    self.draw_marker_mask(im, self.fixed_corners[i, :])
+
+            # Get a cropped subimage based on the entire playing area
+            ul, dr = self.full_board_coords
+            ball_subimg, subimg_ul_coords = (
+                im[ul[0]:dr[0], ul[1]:dr[1], :],
+                ul
+            )
+
+        # Mask the subimage using the HSV values for the ball
+        _, mask = masking.mask_hsv(ball_subimg, Detector.BALL_HSV_RANGES)
+
+        # Try to find the center of the object in the mask
+        c_local, self.is_ball_found = gaussian_robust.detect_gaussian(
+            mask, 4, Detector.BALL_PERCENTILE, Detector.BALL_THRESHOLD, show_sub=self.show_subimages
+        )
+
+        # If we didn't find the ball, return NaN's
+        if not self.is_ball_found:
+            return np.array([np.nan, np.nan])
+
+        # Calculate the coordinates of the detected object,
+        # store the ball's position, and return it
+        c = (subimg_ul_coords + c_local).astype("float32")
+        self.ball_pos = c
+        return c
+
+    def is_ball_in_corner(self):
+        """
+        Determine if the ball is currently in one of corners of board
+
+        Returns:
+            0 if the ball is in the lower-left corner of the board
+            1 if the ball is in the lower-right corner
+            2 if the ball is in the upper-right corner
+            3 if the ball is in the upper-left corner
+            None otherwise
+        """
+        # If we don't know the current location of the ball, return None
+        if not self.is_ball_found:
+            return None
+
+        # Get the ball's current position
+        ball_v, ball_h = self.ball_pos[0], self.ball_pos[1]
+
+        # Define a threshold (in pixels) to decide when the ball is "near" a corner
+        th = 50
+
+        # Check if the ball is near each of the corners
+        for i in range(4):
+            # If we don't have valid coordinates for this corner, skip it
+            if not self.corners_found[i]:
+                continue
+
+            # If the ball is near this corner...
+            corner_coords = self.corners[i]
+            if (abs(ball_v - corner_coords[0]) < th) and (abs(ball_h - corner_coords[1]) < th):
+                # Return the corner index
+                return i
+
+        # If we never returned, the ball is not near any corner
+        return None
+
+    def predictive_cropping_ball(self, im: np.ndarray):
+        """
+        Return a cropped subimage of the ball and the cropping coordinates
+
+        Args:
+            im: np.ndarray
+                image
+        Returns:
+            A cropped subimage of the ball, and the upper-left coordinate of the cropping region
+        """
+        # Get the cropped image and the cropping coordinates
+        im_cropped, ul, dr = self.get_cropped(im, self.ball_pos, Detector.BALL_CROP_SIZE)
+
+        if Detector.SHOW_REGIONS:
+            # Draw the cropping rectangle on the image
+            cv2.rectangle(
+                im, tuple(ul[::-1]), tuple(dr[::-1]), color=(0, 255, 0), thickness=1
+            )
+
+        # Return the image and upper-left coordinate
+        return im_cropped, ul
+
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Utilities
+    # ----------------------------------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def get_cropped(im: np.ndarray, pos: np.ndarray, h_p: float, w_p: float = None):
+        """
+        Return a cropped image centered on a given position,
+        and the coordinates of the top-left and bottom-right corners of the cropped image.
+
         Args :
             im: np.ndarray
                 image
@@ -103,216 +311,77 @@ class Detector:
                  height of the subimage
             w_p: float
                  width of the subimage
+                 If not passed, use the height
+
         Returns :
             im_cropped: np.ndarray
+                the cropped image
             ul: np.ndarray, dim: (2,)
-                top-left corner coordinates in the given image.
+                top-left corner coordinates of the cropped image
             dr: np.ndarray, dim: (2,)
-                down-right corner coordinates in the given image.
+                down-right corner coordinates of the cropped image
         """
+        # Get the full height and width of the original image
         h, w = im.shape[:2]
-        ul_x = min(h - 1, max(0, int(pos[0] - h_p / 2)))
-        ul_y = min(w - 1, max(0, int(pos[1] - w_p / 2)))
-        dr_x = min(h - 1, max(0, int(pos[0] + h_p / 2)))
-        dr_y = min(w - 1, max(0, int(pos[1] + w_p / 2)))
-        im_cropped = im[ul_x:dr_x, ul_y:dr_y]
-        ul = np.array([ul_x, ul_y])
-        dr = np.array([dr_x, dr_y])
+
+        # The cropped image must have an integral width & height
+        if w_p is None:
+            w_p = h_p
+        h_p, w_p = round(h_p), round(w_p)
+
+        # Assume pixel i covers all values in the half-open interval [i, i+1)
+        # Thus, any non-integral positions will be located in pixel floor(position)
+        pos = np.floor(pos)
+
+        # Calculate the coordinates of the top-left and bottom-right corners of the cropped image
+        # Be sure not to exceed the bounds of the original image
+        ul_row = max(0, ceil(pos[0] - h_p / 2))
+        ul_col = max(0, ceil(pos[1] - w_p / 2))
+        dr_row = min(h, ceil(pos[0] + h_p / 2))      # 1 beyond the last row
+        dr_col = min(w, ceil(pos[1] + w_p / 2))      # 1 beyond the last column
+
+        # Crop the image
+        im_cropped = im[ul_row:dr_row, ul_col:dr_col]
+
+        # Form the cropping coordinates as (row, column)
+        ul = np.array([ul_row, ul_col])
+        dr = np.array([dr_row - 1, dr_col - 1])
+
+        # Return the cropped image and cropping coordinates
         return im_cropped, ul, dr
 
-    def predictive_cropping_corners(self, im: np.ndarray):
-        h, w = im.shape[:2]
-        h_p, w_p = (
-            Detector.DEFAULT_SIZE_CROP_CORNERS,
-            Detector.DEFAULT_SIZE_CROP_CORNERS,
+    @staticmethod
+    def draw_marker_mask(im: np.ndarray, loc: np.ndarray):
+        """Draw a red circle at the given location to hide a corner marker that might be mistaken as the ball."""
+        cv2.circle(
+            im,
+            tuple(np.round(loc).astype(int)[::-1]),   # Convert from (row, col) to (horizontal, vertical)
+            radius=10,
+            color=(0, 0, 255),    # Red in (B,G,R)
+            thickness=cv2.FILLED
         )
-        subimgs = []
-        subcoords = []
-        for i in range(4):
-            subimg, ul, dr = self.get_cropped(im, self.corners[i, :], h_p, w_p)
-            subimgs.append(subimg)
-            subcoords.append((ul, dr))
-        return subimgs, subcoords
-
-    def predictive_cropping_ball(self, im: np.ndarray, draw: bool = False):
-        h_p, w_p = Detector.DEFAULT_SIZE_CROP_BALL, Detector.DEFAULT_SIZE_CROP_BALL
-        im_cropped, ul, dr = self.get_cropped(im, self.ball_pos, h_p, w_p)
-        if draw:
-            im = cv2.rectangle(
-                im, tuple(ul[::-1]), tuple(dr[::-1]), (0, 255, 0), 1
-            )  # need to do im =.. ? or just remove the im = ??
-        return im_cropped, ul
-
-    def is_ball_in_corner(self):  # ball pos in in (x,y)
-        if self.ball_pos[0] < 100 and self.ball_pos[1] < 200:
-            return 3
-        if self.ball_pos[0] < 100 and self.ball_pos[1] > 450:
-            return 2
-        if self.ball_pos[0] > 300 and self.ball_pos[1] > 450:
-            return 1
-        if self.ball_pos[0] > 300 and self.ball_pos[1] < 200:
-            return 0
-        return None
-
-    def get_default_subimages_corners(self, im: np.ndarray, show: bool = False):
-        h, w = im.shape[:2]
-        if show:
-            for c in self.default_coords_subimages_corners:
-                cv2.rectangle(im, c[0][::-1], c[1][::-1], (0, 0, 255), 1)
-        # TODO use get_cropped
-        subimages = [
-            im[cs[0][0] : cs[1][0], cs[0][1] : cs[1][1]]
-            for cs in self.default_coords_subimages_corners
-        ]
-        return subimages, self.default_coords_subimages_corners
-
-    def detect_corners(self, frame):
-        corners = np.zeros((4, 2), dtype="float32")
-
-        if self.corners is None or self.corners_missing:
-            (
-                cropped_corners_imgs,
-                subcoords_corners_imgs,
-            ) = self.get_default_subimages_corners(frame)
-        else:
-            (
-                cropped_corners_imgs,
-                subcoords_corners_imgs,
-            ) = self.predictive_cropping_corners(frame)
-
-        missing = False
-        for i, sub_im in enumerate(cropped_corners_imgs):
-            corners[i, :], found = self.detect_corner(
-                sub_im, i, subcoords_corners_imgs[i][0]
-            )
-            missing = missing or not found
-        self.corners_missing = missing
-
-        self.corners = corners
-        return corners
-
-    def detect_corner(self, sub_im: np.ndarray, i: int, coords_ul_sub_im: np.ndarray):
-        sub_masked, mask = masking.mask_hsv(sub_im, self.hsv_params_corners)
-        c_local, found = gaussian_robust.detect_gaussian(
-            mask, i, self.q_corners, self.th_corners, show_sub=self.show_subimages
-        )
-        c = (coords_ul_sub_im + c_local).astype("float32")
-        return c, found
-
-    def detect_ball(
-        self,
-        im: np.ndarray,
-        show_rectangle: bool = False,
-        mask_corner=False,
-        mask_initial=True,
-    ):
-
-        if self.is_ball_found:
-            if mask_corner:
-                corner_ball = self.is_ball_in_corner()
-                if (
-                    corner_ball is not None
-                ):  # masking the corner that is in vicinity of the ball
-                    cv2.circle(
-                        im,
-                        tuple(self.corners[corner_ball, :].astype(int)[::-1]),
-                        10,
-                        (0, 0, 255),
-                        -1,
-                    )
-            cropped_ball_im, coords_ul_cropped_img = self.predictive_cropping_ball(
-                im, draw=show_rectangle
-            )
-        else:
-            # if self.ball_pos is not None:
-            # print("no ball in the frame")
-            if mask_initial:
-                for i in range(4):
-                    cv2.circle(
-                        im,
-                        tuple(np.round(self.corners[i, :]).astype(int)[::-1]),
-                        10,
-                        (0, 0, 255),
-                        -1,
-                    )
-                    cv2.circle(
-                        im,
-                        tuple(np.round(self.fixed_corners[i, :]).astype(int)[::-1]),
-                        10,
-                        (0, 0, 255),
-                        -1,
-                    )
-
-            ul, dr = self.default_coords_subimage_ball
-            cropped_ball_im, coords_ul_cropped_img = (
-                im[ul[0] : dr[0], ul[1] : dr[1], :],
-                ul,
-            )
-        sub_masked, mask = masking.mask_hsv(cropped_ball_im, self.hsv_params_ball)
-        # print("ball")
-        c_local, self.is_ball_found = gaussian_robust.detect_gaussian(
-            mask, 4, self.q_ball, self.th_ball, show_sub=self.show_subimages
-        )
-        if not self.is_ball_found:
-            return np.array([np.nan, np.nan])
-
-        # print(c_local)
-        c = (coords_ul_cropped_img + c_local).astype("float32")  # (x,y)
-        self.ball_pos = c
-        return c
 
     def draw_corners(self, frame: np.ndarray):
-        for i in range(self.corners.shape[0]):
-            cv2.drawMarker(
-                frame,
-                (round(self.corners[i, 1]), round(self.corners[i, 0])),
-                colors[i],
-                cv2.MARKER_TILTED_CROSS,
-                5,
-                1,
-            )  # (u,v)
-        return
+        """Draw an 'x' on the detected corner locations"""
+        for i in range(4):
+            if self.corners_found[i]:
+                cv2.drawMarker(
+                    frame,
+                    position=(round(self.corners[i, 1]), round(self.corners[i, 0])),
+                    color=(0, 0, 255),    # Red in (B,G,R)
+                    markerType=cv2.MARKER_TILTED_CROSS,
+                    markerSize=5,
+                    thickness=1
+                )
 
     def draw_ball(self, frame: np.ndarray):
-        cv2.drawMarker(
-            frame,
-            tuple((np.round(self.ball_pos).astype(int))[::-1]),
-            (0, 0, 255),
-            cv2.MARKER_TILTED_CROSS,
-            5,
-            1,
-        )  # (u,v)
-
-    def reset(self, ball_pos_init: np.ndarray = DEFAULT_INIT_BALL_POS):
-        self.corners = None
-        self.ball_pos = ball_pos_init
-
-
-# TODO remove
-class DetectorFixedPts(Detector):
-    def __init__(self, markers, show_subimages: bool = False):
-        hsv_corners = (
-            (43, 140),  # (minHue, maxHue)
-            (125, 255),  # (minSat, maxSat)
-            (40, 255),  # (minVal, maxVal)
-        )
-        super().__init__(
-            markers,
-            hsv_params_corners=hsv_corners,
-            corner_subimage_half_size=12,
-            show_subimages=show_subimages,
-        )
-
-    def detect_corner(self, sub_im: np.ndarray, i: int, coords_ul_sub_im: np.ndarray):
-        sub_masked, mask = masking.mask_hsv(sub_im, self.hsv_params_corners)
-        c_local, blob_found = gaussian_robust.detect_gaussian(
-            mask, i, self.q_corners, self.th_corners, show_sub=self.show_subimages
-        )
-        c = (coords_ul_sub_im + c_local).astype("float32")
-
-        # TODO use ROS logger
-        if not blob_found:
-            print("Unable to find corner {}".format(i + 1))
-            exit()
-
-        return c, blob_found
+        """Draw an 'x' on the detected ball location"""
+        if self.is_ball_found:
+            cv2.drawMarker(
+                frame,
+                position=tuple((np.round(self.ball_pos).astype(int))[::-1]),
+                color=(0, 255, 0),    # Green in (B,G,R)
+                markerType=cv2.MARKER_TILTED_CROSS,
+                markerSize=5,
+                thickness=1
+            )
