@@ -55,6 +55,7 @@ def detect_gaussian(mask, j, q, th, show_sub, use_contour=True):
                 im_out, c.astype(int)[::-1], (255, 0, 0), cv.MARKER_TILTED_CROSS, 5, 1
             )
             cv.imshow("sub_" + str(j), im_out)
+            cv.waitKey(1)
 
     else:
         if j < 4:  # corners
@@ -126,6 +127,7 @@ def detect_gaussian(mask, j, q, th, show_sub, use_contour=True):
 
         if show_sub:
             cv.imshow("sub_{}".format(j), mask)
+            cv.waitKey(1)
             # cv.imshow("{}".format(j), mask)
             # for i in range(X.shape[0]):
             #     cv.drawMarker(img, (X[i,:])[::-1], (0,0,255), cv.MARKER_SQUARE, 5, 1)
