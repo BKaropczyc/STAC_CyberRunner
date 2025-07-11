@@ -188,6 +188,7 @@ class Detector:
              The position of the ball as an ndarray (row, column)
              or an array of NaN's if the position ball could not be determined.
         """
+        # Determine the cropping region in which we should look for the ball
         # If we detected the ball in the previous frame...
         if self.is_ball_found:
             if mask_corner:
@@ -199,7 +200,7 @@ class Detector:
                     self.draw_marker_mask(im, self.fixed_corners[ball_corner, :])
 
             # Get a cropped subimage based on the ball's most recent location
-            ball_subimg, subimg_ul_coords = self.predictive_cropping_ball(im)
+            ball_subimg, subimg_ul_coords, subimg_dr_coords = self.get_cropped(im, self.ball_pos, Detector.BALL_CROP_SIZE)
 
         else:
             # We didn't detect the ball in the previous frame
@@ -211,9 +212,15 @@ class Detector:
 
             # Get a cropped subimage based on the entire playing area
             ul, dr = self.full_board_coords
-            ball_subimg, subimg_ul_coords = (
+            ball_subimg, subimg_ul_coords, subimg_dr_coords = (
                 im[ul[0]:dr[0], ul[1]:dr[1], :],
-                ul
+                ul, dr
+            )
+
+        if Detector.SHOW_REGIONS:
+            # Draw the cropping rectangle on the image
+            cv2.rectangle(
+                im, tuple(subimg_ul_coords[::-1]), tuple(subimg_dr_coords[::-1]), color=(0, 255, 0), thickness=1
             )
 
         # Mask the subimage using the HSV values for the ball
@@ -269,28 +276,6 @@ class Detector:
 
         # If we never returned, the ball is not near any corner
         return None
-
-    def predictive_cropping_ball(self, im: np.ndarray):
-        """
-        Return a cropped subimage of the ball and the cropping coordinates
-
-        Args:
-            im: np.ndarray
-                image
-        Returns:
-            A cropped subimage of the ball, and the upper-left coordinate of the cropping region
-        """
-        # Get the cropped image and the cropping coordinates
-        im_cropped, ul, dr = self.get_cropped(im, self.ball_pos, Detector.BALL_CROP_SIZE)
-
-        if Detector.SHOW_REGIONS:
-            # Draw the cropping rectangle on the image
-            cv2.rectangle(
-                im, tuple(ul[::-1]), tuple(dr[::-1]), color=(0, 255, 0), thickness=1
-            )
-
-        # Return the image and upper-left coordinate
-        return im_cropped, ul
 
     # ----------------------------------------------------------------------------------------------------------------------
     # Utilities
