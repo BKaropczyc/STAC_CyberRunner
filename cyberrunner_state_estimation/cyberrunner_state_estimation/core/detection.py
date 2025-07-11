@@ -175,8 +175,18 @@ class Detector:
             mask, i, Detector.CORNERS_PERCENTILE, Detector.CORNERS_THRESHOLD, show_sub=self.show_subimages
         )
 
-        # Calculate the coordinates of the detected object and return them
+        # Calculate the global coordinates of the detected object
         c = (coords_ul_sub_im + c_local).astype("float32")
+
+        # If the detected corner location is too far away from the original "marker" position,
+        # invalidate the result. (We likely mistook the ball for the corner marker...)
+        if found:
+            dist_to_orig_marker = np.linalg.norm(c - self.markers[i, :])
+            if dist_to_orig_marker > 30.0:
+                # Our result is invalid
+                found = False
+
+        # Return our results
         return c, found
 
     # ----------------------------------------------------------------------------------------------------------------------
@@ -248,42 +258,6 @@ class Detector:
         c = (subimg_ul_coords + c_local).astype("float32")
         self.ball_pos = c
         return c
-
-    def is_ball_in_corner(self):
-        """
-        Determine if the ball is currently in one of corners of board
-
-        Returns:
-            0 if the ball is in the lower-left corner of the board
-            1 if the ball is in the lower-right corner
-            2 if the ball is in the upper-right corner
-            3 if the ball is in the upper-left corner
-            None otherwise
-        """
-        # If we don't know the current location of the ball, return None
-        if not self.is_ball_found:
-            return None
-
-        # Get the ball's current position
-        ball_v, ball_h = self.ball_pos[0], self.ball_pos[1]
-
-        # Define a threshold (in pixels) to decide when the ball is "near" a corner
-        th = 50
-
-        # Check if the ball is near each of the corners
-        for i in range(4):
-            # If we don't have valid coordinates for this corner, skip it
-            if not self.corners_found[i]:
-                continue
-
-            # If the ball is near this corner...
-            corner_coords = self.corners[i]
-            if (abs(ball_v - corner_coords[0]) < th) and (abs(ball_h - corner_coords[1]) < th):
-                # Return the corner index
-                return i
-
-        # If we never returned, the ball is not near any corner
-        return None
 
     # ----------------------------------------------------------------------------------------------------------------------
     # Utilities
