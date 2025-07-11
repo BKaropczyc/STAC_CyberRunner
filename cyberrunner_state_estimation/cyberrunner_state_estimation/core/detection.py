@@ -59,6 +59,11 @@ class Detector:
         # Since the ball could be anywhere, these default coordinates will be the entire board:
         self.full_board_coords = (self.markers[3], self.markers[1])    # (Upper Left marker, Lower Right marker)
 
+        if Detector.SHOW_REGIONS:
+            # Prepare to collect the rectangular regions we wish to draw for debugging purposes
+            # Regions will be stored as tuples: (upper_left_coord, lower_right_coord, color)
+            self.rects_to_draw = []
+
     def process_frame(self, frame):
         """
         Process frame to get raw image coordinates of the four corners and the ball.
@@ -78,8 +83,14 @@ class Detector:
         ball = self.detect_ball(frame)
 
         if Detector.SHOW_REGIONS:
-            # Display the final frame with the regions drawn on it
-            cv2.imshow("Detector", frame)
+            # Draw each of the cropping regions, and reset rects_to_draw
+            frame_with_regions = frame.copy()
+            for (ul, lr, color) in self.rects_to_draw:
+                cv2.rectangle(frame_with_regions, ul, lr, color, thickness=1)
+            self.rects_to_draw.clear()
+
+            # Display the frame with the regions drawn on it
+            cv2.imshow("Detector Regions", frame_with_regions)
             cv2.waitKey(1)
 
         return corners, ball    # Both in (row, column) conventions
@@ -126,6 +137,13 @@ class Detector:
         sub_imgs = []
         sub_coords = []
 
+        # Work on a copy of the image so that any changes don't alter the original
+        im = im.copy()
+
+        # Mask out the ball (if we know where it is) to prevent it from being mistakenly detected as a corner marker
+        if self.is_ball_found:
+            self.draw_object_mask(im, self.ball_pos)
+
         # For each corner...
         for i in range(4):
             # If we detected this corner during the previous frame...
@@ -142,8 +160,8 @@ class Detector:
             sub_coords.append((ul, lr))
 
             if Detector.SHOW_REGIONS:
-                # Draw the cropping rectangle on the image
-                cv2.rectangle(im, ul[::-1], lr[::-1], color=(0, 0, 255), thickness=1)
+                # Add the cropping rectangle to our list to draw
+                self.rects_to_draw.append((ul[::-1], lr[::-1], (0, 0, 255)))
 
         # Return the results
         return sub_imgs, sub_coords
@@ -167,9 +185,7 @@ class Detector:
 
     def detect_ball(
         self,
-        im: np.ndarray,
-        mask_corner=True,
-        mask_initial=True,
+        im: np.ndarray
     ):
         """
         Detect and return the position of the ball in the image.
@@ -177,39 +193,33 @@ class Detector:
         Args:
             im: np.ndarray
                 The image
-            mask_corner: bool
-                Whether to try to hide the corner markers if the ball gets close to a corner
-                This prevents the corner markers from being mistaken as the ball
-            mask_initial: bool
-                Whether to try to hide all corner markers when the ball was not detected in the previous frame
-                This prevents from the corner markers from being mistaken as the ball
-
         Returns:
              The position of the ball as an ndarray (row, column)
              or an array of NaN's if the position ball could not be determined.
         """
+
+        # Work on a copy of the image so that any changes don't alter the original
+        im = im.copy()
+
+        # Mask out the corner markers, to avoid them being mistakenly detected as the ball
+        for i in range(4):
+            # Inner (movable) markers
+            if self.corners_found[i]:
+                self.draw_object_mask(im, self.corners[i, :])
+            else:
+                self.draw_object_mask(im, self.markers[i, :])
+
+            # Outer (static) markers
+            self.draw_object_mask(im, self.fixed_corners[i, :])
+
         # Determine the cropping region in which we should look for the ball
         # If we detected the ball in the previous frame...
         if self.is_ball_found:
-            if mask_corner:
-                # If the ball is near a corner...
-                ball_corner = self.is_ball_in_corner()
-                if ball_corner is not None:
-                    # Draw a red circle over the corner's markers to avoid mistakenly detecting them as the ball
-                    self.draw_marker_mask(im, self.corners[ball_corner, :])
-                    self.draw_marker_mask(im, self.fixed_corners[ball_corner, :])
-
             # Get a cropped subimage based on the ball's most recent location
             ball_subimg, subimg_ul_coords, subimg_dr_coords = self.get_cropped(im, self.ball_pos, Detector.BALL_CROP_SIZE)
 
         else:
             # We didn't detect the ball in the previous frame
-            if mask_initial:
-                # Hide the markers in all 4 corners to avoid mistakenly detecting them as the ball
-                for i in range(4):
-                    self.draw_marker_mask(im, self.corners[i, :])
-                    self.draw_marker_mask(im, self.fixed_corners[i, :])
-
             # Get a cropped subimage based on the entire playing area
             ul, dr = self.full_board_coords
             ball_subimg, subimg_ul_coords, subimg_dr_coords = (
@@ -218,10 +228,8 @@ class Detector:
             )
 
         if Detector.SHOW_REGIONS:
-            # Draw the cropping rectangle on the image
-            cv2.rectangle(
-                im, tuple(subimg_ul_coords[::-1]), tuple(subimg_dr_coords[::-1]), color=(0, 255, 0), thickness=1
-            )
+            # Add the cropping rectangle to our list to draw
+            self.rects_to_draw.append((subimg_ul_coords[::-1], subimg_dr_coords[::-1], (0, 255, 0)))
 
         # Mask the subimage using the HSV values for the ball
         _, mask = masking.mask_hsv(ball_subimg, Detector.BALL_HSV_RANGES)
@@ -336,12 +344,15 @@ class Detector:
         return im_cropped, ul, dr
 
     @staticmethod
-    def draw_marker_mask(im: np.ndarray, loc: np.ndarray):
-        """Draw a red circle at the given location to hide a corner marker that might be mistaken as the ball."""
+    def draw_object_mask(im: np.ndarray, loc: np.ndarray):
+        """
+        Draw a red circle at the given location to hide an object (e.g., corner marker, ball) that could be mistaken
+        for the thing we're currently trying to detect.
+        """
         cv2.circle(
             im,
             tuple(np.round(loc).astype(int)[::-1]),   # Convert from (row, col) to (horizontal, vertical)
-            radius=10,
+            radius=8,
             color=(0, 0, 255),    # Red in (B,G,R)
             thickness=cv2.FILLED
         )
