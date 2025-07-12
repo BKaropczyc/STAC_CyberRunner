@@ -10,10 +10,11 @@ class Detector:
     Location coordinates are measured in pixels as (row, column).
     """
 
-    # Set SHOW_REGIONS to True to display the cropping regions for easier debugging.
-    # This setting should not be used for production work since drawing the cropping region
-    # rectangles could impact the detection routines.
+    # DEBUGGING OPTIONS:
+    # Set SHOW_REGIONS to True to display the cropping regions overlaid on the frame
+    # Set SHOW_LOCATIONS to True to display the detected locations of the corners and ball
     SHOW_REGIONS = False
+    SHOW_LOCATIONS = False
 
     # Parameters for detecting the markers placed on the corners of the board
     CORNERS_CROP_SIZE_SMALL = 22   # The side length of the cropping square when detecting corners
@@ -40,12 +41,12 @@ class Detector:
         self,
         markers,                    # Initial locations of the 4 markers on the board corners, when level
         markers_are_static=False,   # Whether the markers are the static (outer) dots, vs. the moveable (inner) dots
-        show_subimages=False,       # Whether to display the cropped subimage masks during detection
+        show_subimage_masks=False   # Whether to display the cropped subimage masks during detection
     ):
         # Store parameters in our instance vars
         self.markers = markers[:, ::-1].astype(int)     # Convert from (horizontal, vertical) coords to (row, column)
         self.markers_are_static = markers_are_static
-        self.show_subimages = show_subimages
+        self.show_subimage_masks = show_subimage_masks
 
         # Initialize to no known ball or corner positions
         self.ball_pos = None
@@ -82,15 +83,22 @@ class Detector:
         corners = self.detect_corners(frame)
         ball = self.detect_ball(frame)
 
-        if Detector.SHOW_REGIONS:
-            # Draw each of the cropping regions, and reset rects_to_draw
-            frame_with_regions = frame.copy()
-            for (ul, lr, color) in self.rects_to_draw:
-                cv2.rectangle(frame_with_regions, ul, lr, color, thickness=1)
-            self.rects_to_draw.clear()
+        # Display debugging information, if requested
+        if Detector.SHOW_REGIONS or Detector.SHOW_LOCATIONS:
+            debugging_frame = frame.copy()
 
-            # Display the frame with the regions drawn on it
-            cv2.imshow("Detector Regions", frame_with_regions)
+            if Detector.SHOW_REGIONS:
+                # Draw each of the cropping regions, and reset rects_to_draw
+                for (ul, lr, color) in self.rects_to_draw:
+                    cv2.rectangle(debugging_frame, ul, lr, color, thickness=1)
+                self.rects_to_draw.clear()
+
+            if Detector.SHOW_LOCATIONS:
+                self.draw_corners(debugging_frame)
+                self.draw_ball(debugging_frame)
+
+            # Display the debugging frame with the requested overlays
+            cv2.imshow("Detector Debugging", debugging_frame)
             cv2.waitKey(1)
 
         return corners, ball    # Both in (row, column) conventions
@@ -172,7 +180,7 @@ class Detector:
 
         # Try to find the center of the object in the mask
         c_local, found = gaussian_robust.detect_gaussian(
-            mask, i, Detector.CORNERS_PERCENTILE, Detector.CORNERS_THRESHOLD, show_sub=self.show_subimages
+            mask, i, Detector.CORNERS_PERCENTILE, Detector.CORNERS_THRESHOLD, show_sub=self.show_subimage_masks
         )
 
         # Calculate the global coordinates of the detected object
@@ -246,7 +254,7 @@ class Detector:
 
         # Try to find the center of the object in the mask
         c_local, self.is_ball_found = gaussian_robust.detect_gaussian(
-            mask, 4, Detector.BALL_PERCENTILE, Detector.BALL_THRESHOLD, show_sub=self.show_subimages
+            mask, 4, Detector.BALL_PERCENTILE, Detector.BALL_THRESHOLD, show_sub=self.show_subimage_masks
         )
 
         # If we didn't find the ball, return NaN's

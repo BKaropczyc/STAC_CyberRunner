@@ -14,52 +14,54 @@ from cyberrunner_interfaces.msg import StateEstimateSub
 
 
 class ImageSubscriber(Node):
+    """A ROS Node for listening to images from the camera and publishing messages describing the system's physical state"""
     def __init__(self, skip=1):
         super().__init__("cyberrunner_state_estimation")
+
+        # Subscribe to the camera's Image messages
         self.subscription = self.create_subscription(
-            Image, "cyberrunner_camera/image", self.listener_callback, 10
+            Image, topic="cyberrunner_camera/image", callback=self.listener_callback, qos_profile=10
         )
-        self.publisher_ = self.create_publisher(
-            StateEstimateSub, "cyberrunner_state_estimation/estimate_subimg", 10
+        self.get_logger().info("Image subscriber has been initialized.")
+
+        # We will publish messages of type StateEstimateSub
+        self.publisher = self.create_publisher(
+            StateEstimateSub, topic="cyberrunner_state_estimation/estimate_subimg", qos_profile=10
         )
+
+        # Create our coordinate space transform broadcasters
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        self.get_logger().info("Image subscriber has been initialized.")
-        self.br = CvBridge()
+        self.br = CvBridge()   # For converting ROS Image messages <-> OpenCV images
+
+        # Create the state estimation pipeline, which does the heavy lifting
         self.estimation_pipeline = EstimationPipeline(
-            fps=55.0 / 1.0,  # $$
+            fps=55.0,
             estimator="KF",  #  "FiniteDiff",  "KF", "KFBias"
             print_measurements=True,
-            show_image=False,
-            do_anim_3d=False,
+            show_3d_anim=False,
             viewpoint="top",  # 'top', 'side', 'topandside'
-            show_subimages_detector=False,
+            show_subimage_masks=False
         )
 
-        self.skip = skip
-        self.count = 0
-        # self.prev_a = self.prev_b = 0.0
-        self.a = np.zeros(15, dtype=float)
-        self.b = np.zeros(15, dtype=float)
+        self.skip = skip   # Number of frames to skip when broadcasting (1 = broadcast every frame)
+        self.count = 0     # Count of frames processed
 
     def listener_callback(self, data):
-        # self.get_logger().info('Receiving image frame')
+        """This is the method that gets called every time we receive an Image message from cyberrunner_camera/image"""
+
+        # Convert the ROS Image message back into an OpenCV image
         frame = self.br.imgmsg_to_cv2(data)
 
-        # cv2.imshow("before", frame)
-        b, g, r = np.mean(np.mean(frame, axis=0), axis=0)
-        # print(b,g,r)
-        if g > 100 and b < 40 and r < 40:
-            print("SKIP THIS FRAME")
-            # cv2.waitKey(1)
-            return
-        # cv2.imshow("before", frame)
+        # Extract state information from the image
         x_hat, P, angles, subimg, xb, yb = self.estimation_pipeline.estimate(
             frame, return_ball_subimg=True
         )
 
+        # Only publish every <skip> messages
         if self.count % self.skip == 0:
+            # Fill out the message fields
             msg = StateEstimateSub()
             msg.state.x_b = xb
             msg.state.y_b = yb
@@ -68,59 +70,80 @@ class ImageSubscriber(Node):
             msg.state.alpha = -angles[1]
             msg.state.beta = angles[0]
             msg.subimg = self.br.cv2_to_imgmsg(subimg)
-            self.publisher_.publish(msg)
-            # self.get_logger().info(f"Publishing: {x_hat}")
 
-        # Broadcast transforms
+            # Publish the message
+            self.publisher.publish(msg)
+
+        # Broadcast coordinate space transforms
+
+        # The Camera -> World transform is assumed to be static,
+        # and thus it is only broadcast ONCE (on the first message)
         if self.count == 0:
-            t = self.get_tf_msg(
+            t = self.transform_matrix_to_msg(
                 self.estimation_pipeline.measurements.plate_pose.T__W_C,
-                'camera',
-                'world',
+                frame_id='camera',
+                child_frame_id='world'
             )
             self.tf_static_broadcaster.sendTransform(t)
-        t_maze = self.get_tf_msg(
-            self.estimation_pipeline.measurements.plate_pose.T__W_M,
-            'maze',
-            'world',
-        )
-        T__B_M = np.eye(4)
-        T__B_M[:3, -1] = self.estimation_pipeline.measurements.get_ball_position_in_maze()
-        t_ball = self.get_tf_msg(
-            T__B_M,
-            'maze',
-            'ball'
-        )
-        self.tf_broadcaster.sendTransform([t_maze, t_ball])
 
-        # self.a[:-1] = self.a[1:]
-        # self.a[-1] = msg.state.alpha
-        # self.b[:-1] = self.b[1:]
-        # self.b[-1] = msg.state.beta
-        # print("a_dot: {:.4f}, b_dot: {:.4f}".format((self.a[-1] - self.a[0]) * 55.0 / 14.0, (self.b[-1] - self.b[0]) * 55.0 / 14.0))
-        # #self.prev_a = msg.state.alpha
-        # self.prev_b = msg.state.beta
-        # cv2.imshow("sub", subimg)
-        # cv2.waitKey(1)
+        # The other transforms change with each new state,
+        # and thus must be continuously broadcast.
+        transform_msgs = []
+
+        # Maze -> World transform
+        t_maze = self.transform_matrix_to_msg(
+            self.estimation_pipeline.measurements.plate_pose.T__W_M,
+            frame_id='maze',
+            child_frame_id='world'
+        )
+        transform_msgs.append(t_maze)
+
+        # Maze -> Ball transform
+        # Only broadcast this transform if we know where the ball is currently located in the maze frame
+        ball_pos = self.estimation_pipeline.measurements.get_ball_position_in_maze()
+        if np.all(np.isfinite(ball_pos)):
+            # This is a translation-only transform
+            T__B_M = np.eye(4)
+            T__B_M[:3, -1] = ball_pos
+
+            t_ball = self.transform_matrix_to_msg(
+                T__B_M,
+                frame_id='maze',
+                child_frame_id='ball'
+            )
+            transform_msgs.append(t_ball)
+
+        # Broadcast the dynamic transforms
+        self.tf_broadcaster.sendTransform(transform_msgs)
+
+        # We've processed one more frame
         self.count += 1
 
-    def get_tf_msg(self, se3, frame_id, child_frame_id):
+    def transform_matrix_to_msg(self, se3, frame_id, child_frame_id):
+        """Convert a given coordinate space transform (4x4 matrix) to a TransformStamped ROS message"""
         t = TransformStamped()
+
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = frame_id
         t.child_frame_id = child_frame_id
+
+        # Translation
         t.transform.translation.x = se3[0, 3]
         t.transform.translation.y = se3[1, 3]
         t.transform.translation.z = se3[2, 3]
+
+        # Rotation
         q = Rotation.from_matrix(se3[:3, :3]).as_quat()
         t.transform.rotation.x = q[0]
         t.transform.rotation.y = q[1]
         t.transform.rotation.z = q[2]
         t.transform.rotation.w = q[3]
+
         return t
 
 
 def main(args=None):
+    # Create and run our Node
     rclpy.init(args=args)
     image_subscriber = ImageSubscriber()
     rclpy.spin(image_subscriber)

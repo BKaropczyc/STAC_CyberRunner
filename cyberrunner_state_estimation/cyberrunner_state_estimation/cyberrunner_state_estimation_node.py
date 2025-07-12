@@ -17,7 +17,7 @@ class ImageSubscriber(Node):
             Image, "cyberrunner_camera/image", self.listener_callback, 10
         )
         self.subscription
-        self.publisher_ = self.create_publisher(StateEstimate, "stateEstimation", 10)
+        self.publisher = self.create_publisher(StateEstimate, "stateEstimation", 10)
 
         self.get_logger().info("Image subscriber has been initialized.")
         self.br = CvBridge()
@@ -29,7 +29,7 @@ class ImageSubscriber(Node):
             show_image=False,
             do_anim_3d=False,
             viewpoint="top",  # 'top', 'side', 'topandside'
-            show_subimages_detector=False,
+            show_subimage_masks=False,
         )
 
     def listener_callback(self, data):
@@ -53,7 +53,7 @@ class ImageSubscriber(Node):
         msg.y_b_dot = x_hat[3]
         msg.alpha = -angles[1]
         msg.beta = angles[0]
-        self.publisher_.publish(msg)
+        self.publisher.publish(msg)
         # self.get_logger().info(f"Publishing: {x_hat}")
 
         # cv2.waitKey(1)

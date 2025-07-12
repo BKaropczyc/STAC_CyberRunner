@@ -8,43 +8,49 @@ from ament_index_python.packages import get_package_share_directory
 
 
 class EstimationPipeline:
+    """A Class for estimating the physical state of the environment from an image."""
     def __init__(
         self,
-        fps,
-        estimator="KF",
+        fps,                         # The assumed frame rate of the images being processed
+        estimator="KF",              # The type of estimator to use
         FiniteDiff_mean_steps=0,
-        print_measurements: bool = False,
-        show_image: bool = False,
-        do_anim_3d=False,  # CHANGE HERE TO TURN ON/OFF THE 3D PLOT
-        viewpoint="side",
-        show_subimages_detector=False,
+        print_measurements: bool = False,   # Whether to print the estimates as they are generated
+        show_3d_anim=False,                 # Whether to display a 3D visualization of the estimated physical state
+        viewpoint="side",                   # The view to use for the 3D visualization
+        show_subimage_masks=False           # Whether the Detector object should show the subimage masks
     ):
 
+        # Read in the markers.csv data generated during the "select_markers" calibration step
         share = get_package_share_directory("cyberrunner_state_estimation")
         markers = np.loadtxt(os.path.join(share, "markers.csv"), delimiter=",")
+
+        # Create our Measurements object
         self.measurements = Measurements(
             markers=markers,
-            do_anim_3d=do_anim_3d,
+            show_3d_anim=show_3d_anim,
             viewpoint=viewpoint,
-            show_subimages_detector=show_subimages_detector,
+            show_subimage_masks=show_subimage_masks
         )
+
+        # Create our estimator object
         if estimator == "FiniteDiff":
             self.estimator = FiniteDiff(fps, FiniteDiff_mean_steps)
-        if estimator == "KF":
+        elif estimator == "KF":
             self.estimator = KF(fps)
-        if estimator == "KFBias":
+        elif estimator == "KFBias":
             self.estimator = KFBias(fps)
 
+        # Remember our other params
         self.print_measurements = print_measurements
-        self.show_image = show_image
 
     def estimate(self, frame, return_ball_subimg=False):
         """
-        Compute the measurements and estimate the state.
+        Compute the measurements and estimate the state from frame.
 
         Args:
-            frame: np.ndarray, dim: (400,640)
+            frame: np.ndarray, an image from the camera, dim: (400, 640, 3)
             return_ball_subimg: bool
+
         Returns:
             x_hat: np.ndarray, dim: (n_states,)
             P: np.ndarray dim: (n_states, n_states)
@@ -60,6 +66,7 @@ class EstimationPipeline:
             ball_subimg = self.measurements.get_ball_subimg()
         inputs = self.measurements.get_plate_pose()  # alpha, beta
         tmeas = time.time() - t0
+
         t0 = time.time()
         x_hat, P = self.estimator.estimate(
             inputs=inputs, measurement=np.array([xb, yb])
@@ -74,6 +81,7 @@ class EstimationPipeline:
         alpha_est *= 180 / np.pi
         beta_est *= 180 / np.pi
         testimator = time.time() - t0
+
         # np.set_printoptions(precision=3)
         np.set_printoptions(formatter={"float": "{: 0.3f}".format}, precision=3)
 
@@ -81,11 +89,7 @@ class EstimationPipeline:
             print(
                 f"ball: ({xb:6.3f}, {yb:>6.3f}) | (a, b): ({inputs[0]*180/np.pi:>5.2f}, {inputs[1]*180/np.pi:>5.2f}) [deg] | tmeas:{1000*tmeas:5.2f} [ms] | x_hat:{x_hat} | ab_est:({alpha_est:5.2f}, {beta_est:5.2f}) [deg]"
             )
-        if self.show_image:
-            self.measurements.detector.draw_corners(frame)
-            self.measurements.detector.draw_ball(frame)
-            cv2.imshow("ori", frame)
-            cv2.waitKey(1)
+
         if return_ball_subimg:
             return x_hat, P, inputs, ball_subimg, xb, yb
         else:

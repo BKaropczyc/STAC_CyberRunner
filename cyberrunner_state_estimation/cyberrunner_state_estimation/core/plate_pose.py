@@ -11,25 +11,27 @@ c_name = ["blue", "green", "red", "yellow"]
 
 class PlatePoseEstimator:
 
-    # constants
-    L_EXT_INT_X = 0.317
+    # Constants (in meters)
+    L_EXT_INT_X = 0.317    # Length between the inner-edges of the exterior border along the X-axis (???)
     L_EXT_INT_Y = 0.2715
     C2C_X = 0.2835  # distance btw circles centers along x direction
     C2C_Y = 0.2385  # distance btw circles centers along y direction
-    H_BORDERS = 0.022  # height of the maze borders default = 0.22
+    H_BORDERS = 0.022  # height of the maze borders
 
-    r = 0.008 / 2
-    R_BALL = 0.012 / 2
-    edge_width = 7.5e-3  # to check
+    r = 0.008 / 2           # Radius of the corner marker circles
+    R_BALL = 0.012 / 2      # Radius of the ball
+    edge_width = 7.5e-3     # Width of the edges (???)
 
+    # I THINK these coordinates are using the interior edge of the exterior border as a frame of reference,
+    # with the lower-left corner of the inner edge at (0, 0). That would make these numbers make sense.
     MODEL_POINTS_FIXED_CORNERS = np.array(
         [
             (-r, 0.05, 0),  # Corner 1
             (L_EXT_INT_X + r, 0.05, 0),  # Corner 2
-            (L_EXT_INT_X + r, 0.222, 0),  # Corner 3
-            (-r, 0.222, 0),  # Corner 4
+            (L_EXT_INT_X + r, 0.222, 0),  # Corner 3   # CHECK THIS DIMENSION!!!
+            (-r, 0.222, 0)  # Corner 4
         ],
-        dtype=np.float32,
+        dtype=np.float32
     )
 
     # 3D model points of corners (center of circles) in maze frame {M}
