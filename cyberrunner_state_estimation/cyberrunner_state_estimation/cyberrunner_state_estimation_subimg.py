@@ -45,7 +45,7 @@ class ImageSubscriber(Node):
             show_subimage_masks=False
         )
 
-        self.skip = skip   # Number of frames to skip when broadcasting (1 = broadcast every frame)
+        self.skip = skip   # Number of frames to skip when publishing (1 = publish every frame)
         self.count = 0     # Count of frames processed
 
     def listener_callback(self, data):
@@ -55,7 +55,7 @@ class ImageSubscriber(Node):
         frame = self.br.imgmsg_to_cv2(data)
 
         # Extract state information from the image
-        x_hat, P, angles, subimg, xb, yb = self.estimation_pipeline.estimate(
+        x_hat, _, angles, subimg, xb, yb = self.estimation_pipeline.estimate(
             frame, return_ball_subimg=True
         )
 
