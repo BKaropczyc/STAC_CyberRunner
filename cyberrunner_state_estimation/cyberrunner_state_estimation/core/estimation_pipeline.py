@@ -42,6 +42,8 @@ class EstimationPipeline:
 
         # Remember our other params
         self.print_measurements = print_measurements
+        if print_measurements:
+            np.set_printoptions(precision=3, floatmode="fixed", suppress=True, sign=" ", nanstr="  nan ")
 
     def estimate(self, frame, return_ball_subimg=False):
         """
@@ -52,45 +54,45 @@ class EstimationPipeline:
             return_ball_subimg: bool
 
         Returns:
-            x_hat: np.ndarray, dim: (n_states,)
-            P: np.ndarray dim: (n_states, n_states)
-                covariance matrix
-            inputs: np.ndarray dim: (2,)
+            ball_pos: np.ndarray, dim: (2,)
+                The (x,y) position of the ball in the maze frame
+            board_angles: np.ndarray dim: (2,)
                 [alpha, beta]
+            x_hat: np.ndarray, dim: (n_states,)
+                The predicted next state of the system
+                Estimated state is: [xb, yb, xb_dot, yb_dot]
             ball_subimg: optional, np.ndarray, dim: (64, 64, 3)
+                A 64x64 image around the ball in the maze frame
         """
-        t0 = time.time()
+
+        # Calculate measurements from the frame...
         self.measurements.process_frame(frame, return_ball_subimg)
-        xb, yb, _ = self.measurements.get_ball_position_in_maze()
+        # ...and get the results
+        ball_pos = self.measurements.get_ball_position_in_maze()[:2]   # We only care about the X and Y coords
+        board_angles = self.measurements.get_plate_pose()
         if return_ball_subimg:
             ball_subimg = self.measurements.get_ball_subimg()
-        inputs = self.measurements.get_plate_pose()  # alpha, beta
-        tmeas = time.time() - t0
 
-        t0 = time.time()
-        x_hat, P = self.estimator.estimate(
-            inputs=inputs, measurement=np.array([xb, yb])
-        )
+        # Get predictions of the next state of the system
+        # x_hat is the predicted state of the system: [xb, yb, xb_dot, yb_dot]
+        x_hat, _ = self.estimator.estimate(inputs=board_angles, measurement=ball_pos)
 
-        if type(self.estimator).__name__ == "KFBias":
-            alpha_est = inputs[0] + x_hat[4]
-            beta_est = inputs[1] + x_hat[5]
-        else:  # type(self.estimator).__name__ == "KF":
-            alpha_est = inputs[0]
-            beta_est = inputs[1]
-        alpha_est *= 180 / np.pi
-        beta_est *= 180 / np.pi
-        testimator = time.time() - t0
+        # # Generate board angle estimates
+        # if type(self.estimator).__name__ == "KFBias":
+        #     alpha_est = board_angles[0] + x_hat[4]
+        #     beta_est = board_angles[1] + x_hat[5]
+        # else:  # type(self.estimator).__name__ == "KF":
+        #     alpha_est = board_angles[0]
+        #     beta_est = board_angles[1]
+        # alpha_est = np.rad2deg(alpha_est)
+        # beta_est = np.rad2deg(beta_est)
 
-        # np.set_printoptions(precision=3)
-        np.set_printoptions(formatter={"float": "{: 0.3f}".format}, precision=3)
-
+        # Print out the calculated measurements
         if self.print_measurements:
-            print(
-                f"ball: ({xb:6.3f}, {yb:>6.3f}) | (a, b): ({inputs[0]*180/np.pi:>5.2f}, {inputs[1]*180/np.pi:>5.2f}) [deg] | tmeas:{1000*tmeas:5.2f} [ms] | x_hat:{x_hat} | ab_est:({alpha_est:5.2f}, {beta_est:5.2f}) [deg]"
-            )
+            print(f"ball_pos: {ball_pos} (m)  |  board_angles: {np.rad2deg(board_angles)} (deg)  |  x_hat: {x_hat}")
 
+        # Return our results
         if return_ball_subimg:
-            return x_hat, P, inputs, ball_subimg, xb, yb
+            return ball_pos, board_angles, x_hat, ball_subimg
         else:
-            return x_hat, P, inputs, xb, yb
+            return ball_pos, board_angles, x_hat

@@ -55,7 +55,7 @@ class ImageSubscriber(Node):
         frame = self.br.imgmsg_to_cv2(data)
 
         # Extract state information from the image
-        x_hat, _, angles, subimg, xb, yb = self.estimation_pipeline.estimate(
+        ball_pos, board_angles, x_hat, subimg = self.estimation_pipeline.estimate(
             frame, return_ball_subimg=True
         )
 
@@ -63,12 +63,12 @@ class ImageSubscriber(Node):
         if self.count % self.skip == 0:
             # Fill out the message fields
             msg = StateEstimateSub()
-            msg.state.x_b = xb
-            msg.state.y_b = yb
+            msg.state.x_b = ball_pos[0]
+            msg.state.y_b = ball_pos[1]
             msg.state.x_b_dot = x_hat[2]
             msg.state.y_b_dot = x_hat[3]
-            msg.state.alpha = -angles[1]
-            msg.state.beta = angles[0]
+            msg.state.alpha = -board_angles[1]     # Why are these reversed??? And negated???
+            msg.state.beta = board_angles[0]
             msg.subimg = self.br.cv2_to_imgmsg(subimg)
 
             # Publish the message

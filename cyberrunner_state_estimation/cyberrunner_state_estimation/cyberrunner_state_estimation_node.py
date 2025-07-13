@@ -44,7 +44,7 @@ class ImageSubscriber(Node):
         frame = self.br.imgmsg_to_cv2(data)
 
         # Extract state information from the image
-        x_hat, _, angles, xb, yb = self.estimation_pipeline.estimate(frame)
+        ball_pos, board_angles, x_hat = self.estimation_pipeline.estimate(frame)
 
         # Fill out the message fields
         msg = StateEstimate()
@@ -52,8 +52,8 @@ class ImageSubscriber(Node):
         msg.y_b = x_hat[1]
         msg.x_b_dot = x_hat[2]
         msg.y_b_dot = x_hat[3]
-        msg.alpha = -angles[1]
-        msg.beta = angles[0]
+        msg.alpha = -board_angles[1]
+        msg.beta = board_angles[0]
 
         # Publish the message
         self.publisher.publish(msg)
