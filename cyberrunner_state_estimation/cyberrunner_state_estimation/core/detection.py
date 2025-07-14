@@ -20,9 +20,9 @@ class Detector:
     CORNERS_CROP_SIZE_SMALL = 22   # The side length of the cropping square when detecting corners
     CORNERS_CROP_SIZE_LARGE = 50   # The crop size to use when the current position of a corner is unknown
     CORNERS_HSV_RANGES = (         # Masking parameters used when detecting corners
-        (43, 140),   # (minHue, maxHue)
-        (125, 255),  # (minSat, maxSat)
-        (9, 255)     # (minVal, maxVal)
+        (90, 111),   # (minHue, maxHue)
+        (80, 255),  # (minSat, maxSat)
+        (15, 255)     # (minVal, maxVal)
     )
     CORNERS_PERCENTILE = 5        # Gaussian detection q-th percentile
     CORNERS_THRESHOLD = 0.002     # Gaussian detection threshold
@@ -31,8 +31,8 @@ class Detector:
     BALL_CROP_SIZE = 50           # The side length of the cropping square when detecting the ball
     BALL_HSV_RANGES = (           # Masking parameters used when detecting the ball
         (89, 121),   # (minHue, maxHue)
-        (120, 255),  # (minSat, maxSat)
-        (21, 255)    # (minVal, maxVal)
+        (155, 255),  # (minSat, maxSat)
+        (15, 255)    # (minVal, maxVal)
     )
     BALL_PERCENTILE = 6           # Gaussian detection q-th percentile
     BALL_THRESHOLD = 10 ** (-4)   # Gaussian detection threshold
