@@ -28,8 +28,8 @@ class PlatePoseEstimator:
         [
             (-r, 0.05, 0),  # Corner 1
             (L_EXT_INT_X + r, 0.05, 0),  # Corner 2
-            (L_EXT_INT_X + r, 0.222, 0),  # Corner 3   # CHECK THIS DIMENSION!!!
-            (-r, 0.222, 0)  # Corner 4
+            (L_EXT_INT_X + r, 0.2207, 0),  # Corner 3
+            (-r, 0.2212, 0)  # Corner 4
         ],
         dtype=np.float32
     )

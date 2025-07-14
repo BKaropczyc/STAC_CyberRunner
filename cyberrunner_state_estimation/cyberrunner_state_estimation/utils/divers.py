@@ -28,10 +28,10 @@ def init_capture(device, idx_cam, video_path, init_video_frame_idx):
 def init_win_subimages():
     cs = [
         (450, 330),
-        (650, 330),
-        (650, 100),
-        (450, 100),
-        (550, 200),
+        (850, 330),
+        (850, 0),
+        (450, 0),
+        (650, 170),
     ]  # ul corners coordinates of plate corners subimages windows
     for i, c in enumerate(cs):
         cv.namedWindow("sub_" + str(i))
