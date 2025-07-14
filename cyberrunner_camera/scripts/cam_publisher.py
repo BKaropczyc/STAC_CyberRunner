@@ -10,7 +10,7 @@ import cv2
 
 
 class CamPublisher(Node):
-    def __init__(self, device):
+    def __init__(self, device, display=True):
         super().__init__("cyberrunner_camera")
 
         self.publisher = self.create_publisher(Image, "cyberrunner_camera/image", 1)
@@ -49,8 +49,7 @@ class CamPublisher(Node):
             self.publisher.publish(msg)
 
             # Display the image, if desired
-            debug = True
-            if debug:
+            if display:
                 cv2.imshow("img", frame)  # cv2.resize(frame, (160, 100)))
                 cv2.waitKey(1)
 
@@ -74,13 +73,20 @@ class CamPublisher(Node):
 
 
 def main(args=None):
+    # Check for 'nodisplay' flag
     args = sys.argv[1:]
+    display = not("nodisplay" in args)
+    if "nodisplay" in args:
+        args.remove("nodisplay")
+
+    # Determine the device to display
     device = "/dev/video0" if not args else args[0]
     print("Using device: {}. To use a different device use the command-line argument, e.g.,\n"
-          "ros2 run cyberrunner_camera cam_publisher.py /dev/video*".format(device))
+          "ros2 run cyberrunner_camera cam_publisher.py /dev/video* [nodisplay]".format(device))
 
+    # Start our ROS node
     rclpy.init(args=args)
-    vid = CamPublisher(device)
+    _ = CamPublisher(device, display)
     rclpy.shutdown()
 
 
