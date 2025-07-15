@@ -81,8 +81,8 @@ class ImageSubscriber(Node):
         if self.count == 0:
             t = self.transform_matrix_to_msg(
                 self.estimation_pipeline.measurements.plate_pose.T__W_C,
-                frame_id='camera',
-                child_frame_id='world'
+                frame_id='world',
+                child_frame_id='camera'
             )
             self.tf_static_broadcaster.sendTransform(t)
 
@@ -93,8 +93,8 @@ class ImageSubscriber(Node):
         # Maze -> World transform
         t_maze = self.transform_matrix_to_msg(
             self.estimation_pipeline.measurements.plate_pose.T__W_M,
-            frame_id='maze',
-            child_frame_id='world'
+            frame_id='world',
+            child_frame_id='maze'
         )
         transform_msgs.append(t_maze)
 
@@ -103,11 +103,11 @@ class ImageSubscriber(Node):
         ball_pos = self.estimation_pipeline.measurements.get_ball_position_in_maze()
         if np.all(np.isfinite(ball_pos)):
             # This is a translation-only transform
-            T__B_M = np.eye(4)
-            T__B_M[:3, -1] = ball_pos
+            T__M_B = np.eye(4)
+            T__M_B[:3, -1] = ball_pos
 
             t_ball = self.transform_matrix_to_msg(
-                T__B_M,
+                T__M_B,
                 frame_id='maze',
                 child_frame_id='ball'
             )
