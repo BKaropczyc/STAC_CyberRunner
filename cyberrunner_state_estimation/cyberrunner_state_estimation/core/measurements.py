@@ -10,7 +10,8 @@ from cyberrunner_state_estimation.utils.divers import init_win_subimages
 
 class Measurements:
     """
-    To be written...
+    A class for extracting measurements of the system state from the camera images.
+    These measurements include the position of the ball in the maze frame and the angles of the board surface.
     """
     def __init__(
         self, markers, show_3d_anim=True, viewpoint="side", show_subimage_masks=False
@@ -48,9 +49,14 @@ class Measurements:
     ):
         """
         Process the frame to compute the angles of the plate and the position of the ball in the maze frame {m}.
+        The measurements calculated during this method must be accessed via methods such as:
+        get_ball_position_in_maze(), get_plate_pose(), etc.
 
         Args :
             frame: np.ndarray, dim: (400, 640, 3)
+                An image from the camera
+            get_ball_subimg: bool
+                Whether to generate a subimage centered on the ball as well
         """
         # Perform one-time initializations
         if self.plate_pose.T__W_C is None:
@@ -82,9 +88,9 @@ class Measurements:
         ball_undistorted = undist_pts[4, :]
 
         # Estimate the angles of the playing surface from the locations of the corners in the image
-        # Alpha is the angle of the longer (horizontal) axis
-        # Beta is the angle of the shorter (vertical) axis
-        alpha, beta = self.plate_pose.estimate_anglesXY(corners_undistorted)
+        # Alpha is the angle of the longer (horizontal) axis, around the -Y axis
+        # Beta is the angle of the shorter (vertical) axis, around the +X axis
+        alpha, beta = self.plate_pose.estimate_angles(corners_undistorted)
         self.plate_angles = (alpha, beta)
 
         # Compute the 3D position of the ball in the maze frame {m}
@@ -98,10 +104,11 @@ class Measurements:
             # If we couldn't locate the ball, return an entirely black image
             if np.any(np.isnan(self.ball_pos)):
                 self.ball_subimg = np.zeros((64, 64, 3), dtype=np.uint8)
+
             else:  # TODO clean up and optimize
-                # Create collection of coordinates in a 32mmx32mm square around the ball's location in the maze frame
+                # Create collection of (homogeneous) coordinates in a 32mmx32mm square around the ball's location in the maze frame
                 points_board = np.zeros((64 * 64, 4))
-                points_board[:, -1] = 1.0
+                points_board[:, -1] = 1.0     # Homogeneous coords always have 1.0 as the last entry
                 points_board[:, :2] = (
                     1.0e-3 * np.mgrid[-32:32, -32:32][::-1].reshape(2, -1).transpose()
                 )
@@ -125,6 +132,9 @@ class Measurements:
         if self.anim_3d_side is not None:
             self.update_3d_anim_side()
 
+    # -----------------------------------------------
+    # Measurement accessors
+    # -----------------------------------------------
     def get_ball_subimg(self):
         return self.ball_subimg
 
@@ -134,19 +144,18 @@ class Measurements:
 
         Returns:
             ball_pos: np.ndarray, dim: (2,)
-                    2d position of the ball in the image frame.
-
+                2d position of the ball in the image frame.
         """
         return self.ball_img_coords
 
     def get_ball_position_in_maze(self):
         """
-        Return the position of the ball in the maze frame {m}.
+        Return the 3D position of the ball in the maze frame {m}.
 
         Returns:
             ball_pos: np.ndarray, dim: (3,)
-                    3d position of the ball in the maze frame {m}.
-                    note: the z-coordinate of the ball in maze frame is fixed and known
+                    3D position of the ball in the maze frame {m}.
+                    NOTE: the z-coordinate of the ball in the maze frame is fixed and known
                     by assumption of constant contact with the maze: z__m_b = ball_radius.
 
         """
@@ -154,13 +163,17 @@ class Measurements:
 
     def get_plate_pose(self):
         """
-        Return the angles (Euler YXZ) that describe the orientation of the maze frame {m} wrt the world frame {w}.
+        Return the angles that describe the orientation of the maze frame {m} wrt the world frame {w}.
 
         Returns:
-            ball_pos: Tuple(float, float)
-                      (alpha, beta) around X and Y respectively
+            Tuple(float, float)
+                 (alpha, beta) around -Y and +X respectively, following the convention in the original paper
         """
         return self.plate_angles
+
+    # -----------------------------------------------
+    # Utilities
+    # -----------------------------------------------
 
     def camera_localization(self, frame):
         """
@@ -199,18 +212,10 @@ class Measurements:
             world_vec * (-self.plate_pose.T__W_C[2, -1])
             + self.plate_pose.T__W_C[:3, -1]
         )
-        mask = (
-            (world_points[:, 0] >= -(2.0 * self.plate_pose.r))
-            & (
-                world_points[:, 0]
-                <= self.plate_pose.L_EXT_INT_X + 2.0 * self.plate_pose.r
-            )
-            & (world_points[:, 1] >= -(2.0 * self.plate_pose.r))
-            & (
-                world_points[:, 1]
-                <= self.plate_pose.L_EXT_INT_Y + 2.0 * self.plate_pose.r
-            )
-        )
+        mask = ((world_points[:, 0] >= -self.plate_pose.MARKER_DIAM)
+              & (world_points[:, 0] <= self.plate_pose.L_EXT_INT_X + self.plate_pose.MARKER_DIAM)
+              & (world_points[:, 1] >= -self.plate_pose.MARKER_DIAM)
+              & (world_points[:, 1] <= self.plate_pose.L_EXT_INT_Y + self.plate_pose.MARKER_DIAM))
         self.mask = 255 * mask.reshape(h, w, 1).astype(np.uint8)
 
     def ball_pos_backproject(self, ball_undistorted, K, T__C_M):
@@ -227,7 +232,7 @@ class Measurements:
         if np.any(np.isnan(ball_undistorted)):
             return np.array([np.nan, np.nan, np.nan])
 
-        d = PlatePoseEstimator.R_BALL
+        d = PlatePoseEstimator.BALL_RAD
         v, u = ball_undistorted
 
         H = K @ T__C_M[:3, :]
@@ -250,7 +255,7 @@ class Measurements:
         x = np.linalg.solve(A, b)
 
         # Return the coordinates of the ball in the maze frame
-        x_M = np.array([x[0], x[1], PlatePoseEstimator.R_BALL])
+        x_M = np.array([x[0], x[1], PlatePoseEstimator.BALL_RAD])
         return x_M
 
     def update_3d_anim_top(self):

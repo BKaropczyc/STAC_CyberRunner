@@ -52,8 +52,8 @@ class ImageSubscriber(Node):
         msg.y_b = x_hat[1]
         msg.x_b_dot = x_hat[2]
         msg.y_b_dot = x_hat[3]
-        msg.alpha = -board_angles[1]
-        msg.beta = board_angles[0]
+        msg.alpha = board_angles[0]
+        msg.beta = board_angles[1]
 
         # Publish the message
         self.publisher.publish(msg)

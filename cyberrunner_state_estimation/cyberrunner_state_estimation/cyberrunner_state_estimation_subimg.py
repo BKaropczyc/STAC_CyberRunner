@@ -65,10 +65,10 @@ class ImageSubscriber(Node):
             msg = StateEstimateSub()
             msg.state.x_b = ball_pos[0]
             msg.state.y_b = ball_pos[1]
-            msg.state.x_b_dot = x_hat[2]
-            msg.state.y_b_dot = x_hat[3]
-            msg.state.alpha = -board_angles[1]     # Why are these reversed??? And negated???
-            msg.state.beta = board_angles[0]
+            msg.state.x_b_dot = x_hat[2]           # Do we use the velocities???
+            msg.state.y_b_dot = x_hat[3]           # I thought a recurrent policy didn't use them at all!
+            msg.state.alpha = board_angles[0]
+            msg.state.beta = board_angles[1]
             msg.subimg = self.br.cv2_to_imgmsg(subimg)
 
             # Publish the message

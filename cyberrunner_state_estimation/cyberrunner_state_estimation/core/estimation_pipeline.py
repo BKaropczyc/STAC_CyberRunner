@@ -77,16 +77,6 @@ class EstimationPipeline:
         # x_hat is the predicted state of the system: [xb, yb, xb_dot, yb_dot]
         x_hat, _ = self.estimator.estimate(inputs=board_angles, measurement=ball_pos)
 
-        # # Generate board angle estimates
-        # if type(self.estimator).__name__ == "KFBias":
-        #     alpha_est = board_angles[0] + x_hat[4]
-        #     beta_est = board_angles[1] + x_hat[5]
-        # else:  # type(self.estimator).__name__ == "KF":
-        #     alpha_est = board_angles[0]
-        #     beta_est = board_angles[1]
-        # alpha_est = np.rad2deg(alpha_est)
-        # beta_est = np.rad2deg(beta_est)
-
         # Print out the calculated measurements
         if self.print_measurements:
             print(f"ball_pos: {ball_pos} (m)  |  board_angles: {np.rad2deg(board_angles)} (deg)  |  x_hat: {x_hat}")
