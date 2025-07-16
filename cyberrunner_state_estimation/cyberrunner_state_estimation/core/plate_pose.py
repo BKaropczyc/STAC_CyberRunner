@@ -77,15 +77,14 @@ class PlatePoseEstimator:
         o.scale(3)
         xc, yc = o.xc, o.yc
 
-        # I'm not sure what these matrices are...
-        # They look like a "camera matrix" for OpenCV
-        self.f = 300     # Focal length?  Why used as negative???
-        self.K_ocam = np.array([[-self.f, 0, xc],
+        # Define "camera intrinsic matrices" for OpenCV and Ocam
+        self.f = 400                            # Focal length. Should be updated for your specific camera setup!
+        self.K = np.array([[self.f, 0, yc],     # Ocam uses (row, col) convention for xc, yc, so we must swap them.
+                           [0, self.f, xc],
+                           [0, 0, 1]])
+        self.K_ocam = np.array([[-self.f, 0, xc],   # Ocam uses a reversed Z-axis, so focal length is negative (???)
                                 [0, -self.f, yc],
                                 [0, 0, 1]])
-        self.K = np.array([[+self.f, 0, yc],    # Why yc, xc???
-                           [0, +self.f, xc],
-                           [0, 0, 1]])
 
         # Declare other instance vars
         self.T__W_M = None       # The World->Maze transform
