@@ -63,7 +63,7 @@ void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixe
     dynamixel_init(port, 2, dynamixel_ids, 1000000, 50, (uint32_t*)positions);
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    // Moving speeds from message
+    // Attempt to reset the playing surface
     moving_speeds[0] = -150;
     moving_speeds[1] = 150;
     dynamixel_step(2, dynamixel_ids, moving_speeds);
@@ -77,6 +77,8 @@ void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixe
     moving_speeds[1] = 0;
     dynamixel_step(2, dynamixel_ids, moving_speeds);
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+    // Stop the servos
     moving_speeds[0] = 0;
     moving_speeds[1] = 0;
     dynamixel_step(2, dynamixel_ids, moving_speeds);

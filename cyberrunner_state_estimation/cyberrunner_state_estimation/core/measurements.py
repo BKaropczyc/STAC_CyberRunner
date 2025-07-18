@@ -81,7 +81,7 @@ class Measurements:
         self.ball_img_coords = ball_img_coords
 
         # Undistort all of these points using the camera calibration data
-        # These coordinates are still wrt the camera imaga
+        # These coordinates are still wrt the camera image
         raw_pts = np.vstack((corners_img_coords, ball_img_coords))
         undist_pts = self.plate_pose.undistort_points(raw_pts)
         corners_undistorted = undist_pts[:4, :]
