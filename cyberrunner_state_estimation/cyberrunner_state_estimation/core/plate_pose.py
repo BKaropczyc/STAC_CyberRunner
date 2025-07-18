@@ -14,10 +14,10 @@ class PlatePoseEstimator:
     # Constants
     # All measurements are in meters
     L_EXT_INT_X = 0.317    # Length between the inner-edges of the exterior frame along the X-axis
-    L_EXT_INT_Y = 0.2715   # Length between the inner-edges of the exterior frame along the Y-axis
-    C2C_X = 0.2835         # Distance between (movable) corner circle centers along X axis
-    C2C_Y = 0.2385         # Distance between (movable) corner circle centers along Y axis
-    H_BORDERS = 0.022      # Height of the maze borders (from board surface to top of the game)
+    L_EXT_INT_Y = 0.2706   # Length between the inner-edges of the exterior frame along the Y-axis
+    C2C_X = 0.2812         # Distance between (movable) corner circle centers along X axis
+    C2C_Y = 0.2367         # Distance between (movable) corner circle centers along Y axis
+    H_BORDERS = 0.0215      # Height of the maze borders (from board surface to top of the game)
 
     MARKER_DIAM = 0.008             # Diameter of the cornet marker circles (dot stickers)
     MARKER_RAD = MARKER_DIAM / 2    # Radius of the corner marker circles (dot stickers)
