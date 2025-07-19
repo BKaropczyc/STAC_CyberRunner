@@ -1,5 +1,6 @@
 from cyberrunner_dreamer import cyberrunner_layout
 from cyberrunner_dreamer.path import LinearPath
+from cyberrunner_dreamer.layout_renderer import LayoutRenderer
 
 from cyberrunner_interfaces.msg import DynamixelVel, StateEstimateSub
 from cyberrunner_interfaces.srv import DynamixelReset
@@ -50,13 +51,7 @@ class CyberrunnerGym(gym.Env):
                                                         # TODO: Check these measurements!
         shared = get_package_share_directory("cyberrunner_dreamer")
         self.p = LinearPath.load(os.path.join(shared, "path_0002_hard.pkl"))
-
-        # self.p = LinearPath(
-        #    np.array(layout["waypoints"]),
-        #     walls_h=np.array(layout["walls_h"]),
-        #     walls_v=np.array(layout["walls_v"]),
-        #     holes=np.array(layout["holes"]),
-        # )
+        self.renderer = LayoutRenderer(layout, scale=1500)
 
         self.prev_path_pos = 0                  # The most recent position achieved along the path to the goal
         self.num_wait_steps = num_wait_steps    # Number of steps to wait before starting a new episode
@@ -247,8 +242,27 @@ class CyberrunnerGym(gym.Env):
         return obs, reward, done, info
 
     def render(self, mode="human"):
-        # We currently don't render this environment
-        pass
+        if mode == "rgb_array" or mode == "human":
+            # Determine the current call position
+            ball_pos = None
+            if self.ball_detected:
+                ball_pos = self.obs["states"][2:]
+
+            # Determine the closest path point
+            path_pos = None
+            if self.prev_path_pos >= 0:
+                path_pos = self.p.points[self.prev_path_pos]
+
+            # Get a visualization of the current state of the system
+            frame = self.renderer.get_image(ball_pos, self.off_path, path_pos)
+
+            if mode == "human":
+                cv2.imshow("Layout", frame)
+                cv2.waitKey(1)
+            else:
+                return frame
+        else:
+            super().render(mode=mode)  # Raise an exception
 
     # ------------------------------------------------------------------------------------------------------------------
     # Private utility methods

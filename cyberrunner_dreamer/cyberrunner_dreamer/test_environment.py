@@ -6,22 +6,29 @@ import cyberrunner_dreamer    # To register the environment with Gym
 from warnings import filterwarnings
 filterwarnings(action='ignore', category=DeprecationWarning, message=".* old step API which returns one bool instead of two.*")
 
-# Initialize our environment
-env = gym.make("cyberrunner_dreamer:cyberrunner-ros-v0", new_step_api=False)
-env.action_space.seed(42)
+def main():
+    # Initialize our environment
+    env = gym.make("cyberrunner_dreamer:cyberrunner-ros-v0", new_step_api=False)
+    env.action_space.seed(42)
 
-# Start a basic environment-interaction loop
-obs, info = env.reset(seed=42, return_info=True)
-print("Starting a new episode...")
-
-while True:
-    # Take a random action
-    act = env.action_space.sample()
-    obs, reward, done, info = env.step(act)
-
-    # Reset the environment if the episode is over
-    if done:
-        obs, info = env.reset(return_info=True)
+    # Start a basic environment-interaction loop
+    while True:
         print("Starting a new episode...")
+        obs, info = env.reset(return_info=True)
+        env.render()
 
-env.close()
+        # Play one episode
+        while True:
+            # Take a random action
+            act = env.action_space.sample()
+            obs, reward, done, info = env.step(act)
+            env.render()
+
+            if done:
+                break   # End of this episode
+
+    env.close()
+
+
+if __name__ == "__main__":
+    main()
