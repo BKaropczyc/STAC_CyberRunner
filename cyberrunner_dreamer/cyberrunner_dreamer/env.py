@@ -150,7 +150,7 @@ class CyberrunnerGym(gym.Env):
             print("Waiting for the ball to appear...")
 
             # Make sure we get num_wait_steps consecutive frames with the ball in the starting location
-            starting_pos = np.array([0.155, 0.208])
+            starting_pos = np.array([0.150, 0.218])
             count = 0
             while count < self.num_wait_steps:
                 # Check if the ball is present near the starting location
@@ -167,6 +167,7 @@ class CyberrunnerGym(gym.Env):
                     count += 1
                 else:
                     count = 0    # Reset the counter
+        print(f"Playing episode {self.episodes}...")
 
         # Initialize prev_path_pos
         self.prev_path_pos = self.p.closest_point(obs["states"][2:4])[0]
@@ -219,7 +220,7 @@ class CyberrunnerGym(gym.Env):
             print(f"Finished episode {self.episodes}:")
             print(f"  Reason: {reason}")
             print(f"  Episode length: {self.steps} steps")
-            print(f"  Total accumulated reward: {self.accum_reward}")
+            print(f"  Total accumulated reward: {self.accum_reward:0.4f}")
 
         # Output a warning if we're stepping too slowly
         now = time.time()
