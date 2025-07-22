@@ -17,7 +17,7 @@ class Measurements:
     # DEBUGGING OPTIONS:
     # Set the following options to True to enable additional debugging output
     SHOW_UNDISTORTED_FRAME = False   # Show the frame with the distortion corrected
-    SHOW_PATH = True      # Show the maze path for calculating progress superimposed on the frame being processed
+    SHOW_PATH = False      # Show the maze path for calculating progress superimposed on the frame being processed
     SHOW_BALL_SUBIMAGE = False   # Show the 64x64 pixel subimage centered on the ball
 
     def __init__(
