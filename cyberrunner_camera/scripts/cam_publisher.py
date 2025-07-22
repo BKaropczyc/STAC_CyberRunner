@@ -50,7 +50,7 @@ class CamPublisher(Node):
 
             # Display the image, if desired
             if display:
-                cv2.imshow("img", frame)  # cv2.resize(frame, (160, 100)))
+                cv2.imshow("Camera", frame)
                 cv2.waitKey(1)
 
             frame_count += 1

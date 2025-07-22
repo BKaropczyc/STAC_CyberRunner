@@ -22,7 +22,7 @@ class CyberrunnerGym(gym.Env):
         repeat=1,
         layout=cyberrunner_layout.cyberrunner_hard_layout,
         num_rel_path=5,
-        num_wait_steps=15,
+        num_wait_steps=30,
         reward_on_fail=0.0,
         reward_on_goal=0.5
     ):
@@ -281,7 +281,7 @@ class CyberrunnerGym(gym.Env):
         future = self.client.call_async(req)
 
         # Wait for board reset to be finished
-        rclpy.spin_until_future_complete(self.node, future, timeout_sec=5)
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=2)
 
     def _send_action(self, action):
         # Scale the action
