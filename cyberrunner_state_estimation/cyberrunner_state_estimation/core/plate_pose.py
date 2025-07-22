@@ -78,12 +78,13 @@ class PlatePoseEstimator:
         xc, yc = o.xc, o.yc
 
         # Define "camera intrinsic matrices" for OpenCV and Ocam
-        self.f = 400                            # Focal length. Should be updated for your specific camera setup!
-        self.K = np.array([[self.f, 0, yc],     # Ocam uses (row, col) convention for xc, yc, so we must swap them.
-                           [0, self.f, xc],
+        self.fx = 400                            # Focal length. Should be updated for your specific camera setup!
+        self.fy = 400
+        self.K = np.array([[self.fx, 0, yc],     # Ocam uses (row, col) convention for xc, yc, so we must swap them.
+                           [0, self.fy, xc],
                            [0, 0, 1]])
-        self.K_ocam = np.array([[-self.f, 0, xc],   # Ocam uses a reversed Z-axis, so focal length is negative (???)
-                                [0, -self.f, yc],
+        self.K_ocam = np.array([[-self.fy, 0, xc],   # Ocam uses a reversed Z-axis, so focal length is negative (???)
+                                [0, -self.fx, yc],
                                 [0, 0, 1]])
 
         # Declare other instance vars
