@@ -215,6 +215,9 @@ class CyberrunnerGym(gym.Env):
             else:
                 reward = self.reward_on_fail
 
+            # Stop the servos
+            self._send_action(np.array([0, 0]))
+
         # Update the accumulated reward for this episode
         self.accum_reward += reward
 
@@ -421,7 +424,7 @@ class CyberrunnerGym(gym.Env):
             reason = "TOO MUCH PROGRESS (cheated)"
 
         # Done if we've taken too many steps
-        elif self.steps > 3000:
+        elif self.steps >= 3000:
             reason = "MAX STEPS REACHED"
 
         # We are 'done' if we defined a reason
