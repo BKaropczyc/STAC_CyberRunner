@@ -150,7 +150,7 @@ class CyberrunnerGym(gym.Env):
             print("Waiting for the ball to appear...")
 
             # Make sure we get num_wait_steps consecutive frames with the ball in the starting location
-            starting_pos = np.array([0.150, 0.218])
+            starting_pos = self.p.points[0]
             count = 0
             while count < self.num_wait_steps:
                 # Check if the ball is present near the starting location
@@ -167,6 +167,9 @@ class CyberrunnerGym(gym.Env):
                     count += 1
                 else:
                     count = 0    # Reset the counter
+
+                # Keep OpenCV processing events (in case we have render windows open)
+                cv2.waitKey(1)
         print(f"Playing episode {self.episodes}...")
 
         # Initialize prev_path_pos
