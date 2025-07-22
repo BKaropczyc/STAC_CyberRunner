@@ -13,6 +13,13 @@ class Measurements:
     A class for extracting measurements of the system state from the camera images.
     These measurements include the position of the ball in the maze frame and the angles of the board surface.
     """
+
+    # DEBUGGING OPTIONS:
+    # Set the following options to True to enable additional debugging output
+    SHOW_UNDISTORTED_FRAME = False   # Show the frame with the distortion corrected
+    SHOW_PATH = True      # Show the maze path for calculating progress superimposed on the frame being processed
+    SHOW_BALL_SUBIMAGE = False   # Show the 64x64 pixel subimage centered on the ball
+
     def __init__(
         self, markers, show_3d_anim=True, viewpoint="side", show_subimage_masks=False
     ):
@@ -37,6 +44,32 @@ class Measurements:
                 self.anim_3d_side = Anim3d(viewpoint="side")
             if "top" in viewpoint:
                 self.anim_3d_top = Anim3d(viewpoint="top")
+
+        # Debugging options
+        if Measurements.SHOW_UNDISTORTED_FRAME:
+            # Get all image coordinates
+            h, w = (400, 640)
+            all_img_pts = np.array(list(np.ndindex((h, w))))
+            # Get the undistorted coordinates of every pixel
+            undistorted_coords = self.plate_pose.undistort_points(all_img_pts)
+            # Convert the coordinates for use with the remap() function
+            self.undistorted_coords = undistorted_coords[:, ::-1].reshape(h, w, 2).astype(np.float32)
+
+        if Measurements.SHOW_PATH:
+            # Load the maze path waypoint coordinates
+            from cyberrunner_dreamer.cyberrunner_layout import cyberrunner_hard_layout
+            waypoints = cyberrunner_hard_layout['waypoints']
+
+            # Convert the waypoints to "maze" coordinates, with the origin in the center of the board
+            center = np.array([0.276, 0.231]) / 2.0
+            maze_pts = waypoints - center
+
+            # Create full homogeneous coordinates, each row is a 3D point in the maze frame
+            maze_coords = np.zeros((len(maze_pts), 4))
+            maze_coords[:, :2] = maze_pts
+            maze_coords[:, 2] = PlatePoseEstimator.BALL_RAD     # Assume the path sits at the ball's radius
+            maze_coords[:, 3] = 1.0       # Homogeneous coordinates
+            self.maze_coords = maze_coords
 
         # Create our subimage mask windows
         if show_subimage_masks:
@@ -72,6 +105,12 @@ class Measurements:
             if self.anim_3d_side is not None:
                 self.anim_3d_side.init_3d_anim(self.plate_pose.T__W_C)
 
+        if Measurements.SHOW_UNDISTORTED_FRAME:
+            # Display the undistorted frame
+            undistorted_img = cv2.remap(frame, self.undistorted_coords, map2=None, interpolation=cv2.INTER_LINEAR)
+            cv2.imshow("Undistorted Frame", undistorted_img)
+            cv2.waitKey(1)
+
         # Mask out the background of the image
         frame = cv2.bitwise_and(frame, frame, mask=self.mask)
 
@@ -101,10 +140,41 @@ class Measurements:
         # Generate the ball sub-image, if requested
         if get_ball_subimg:
             self.ball_subimg = self.ball_subimage_from_frame(frame)
+            if Measurements.SHOW_BALL_SUBIMAGE:
+                cv2.imshow("Ball Subimage", self.ball_subimg)
+                cv2.waitKey(1)
 
         # Update our 3D animation(s)
         self.update_3d_anim(self.anim_3d_top)
         self.update_3d_anim(self.anim_3d_side)
+
+        if Measurements.SHOW_PATH:
+            # Draw the maze path superimposed on the image
+
+            # Transform the maze waypoints into 3D camera coordinates
+            cam_coords = (self.plate_pose.T__C_M @ self.maze_coords.T).T[:, :3]
+
+            # Transform these camera coordinates into image coordinates
+            img_coords = (self.plate_pose.K @ cam_coords.T).T
+            img_coords /= img_coords[:, 2:]    # Normalize depth
+            img_coords = img_coords[:, :2]     # Just keep (u, v)
+
+            # Use sub-pixel precision to draw the maze path
+            shift_bits = 4
+            img_coords = (img_coords * 2 ** shift_bits).astype(int)
+
+            # Draw the path on a copy of the frame
+            path_frame = frame.copy()
+            for pt1, pt2 in zip(img_coords, img_coords[1:]):
+                cv2.line(path_frame, pt1, pt2,
+                         color=(0, 255, 0),
+                         thickness=1,
+                         lineType=cv2.LINE_AA,
+                         shift=shift_bits)
+
+            # Display the frame with the path superimposed
+            cv2.imshow(" Maze Path", path_frame)
+            cv2.waitKey(1)
 
     def ball_subimage_from_frame(self, frame):
         """
