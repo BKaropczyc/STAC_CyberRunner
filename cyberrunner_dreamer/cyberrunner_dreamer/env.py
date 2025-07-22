@@ -209,14 +209,14 @@ class CyberrunnerGym(gym.Env):
         # Determine whether the episode is now over
         done, reason = self._get_done(obs)
         if done:
+            # Stop the servos
+            self._send_action(np.zeros(2))
+
             # Update the reward
             if self.success:
                 reward += self.reward_on_goal
             else:
                 reward = self.reward_on_fail
-
-            # Stop the servos
-            self._send_action(np.array([0, 0]))
 
         # Update the accumulated reward for this episode
         self.accum_reward += reward
