@@ -1,20 +1,17 @@
-#polynomial coefficients for the DIRECT mapping function (ocam_model.ss in MATLAB). These are used by cam2world
+# Camera calibration parameters
 
-5 -1.039121e+03 0.000000e+00 2.691087e-04 2.010848e-07 -7.252130e-11 
+# Image size used during calibration (in pixels)
+# Width Height
+1920 1080
 
-#polynomial coefficients for the inverse mapping function (ocam_model.invpol in MATLAB). These are used by world2cam
+# Focal lengths
+# f_x f_y
+533.612 532.558
 
-8 1591.697024 1225.708868 546.302676 502.415591 322.029177 256.157188 140.485896 29.168972 
+# Principal point
+# c_x c_y
+960 540
 
-#center: "row" and "column", starting from 0 (C convention)
-
-614.883002 927.803988
-
-#affine parameters "c", "d", "e"
-
-1.000656 -0.000186 0.000525
-
-#image size: "height" and "width"
-
-1200 1920
-
+# Distortion Coefficients
+# k1 k2 p1 p2 [k3 [k4 k5 k6 [s1 s2 s3 s4]]]
+-0.02 -0.0025 0 0 0 0 0 0 0 0 0 0
