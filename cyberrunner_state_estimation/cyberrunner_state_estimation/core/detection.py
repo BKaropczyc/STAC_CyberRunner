@@ -7,7 +7,8 @@ from cyberrunner_state_estimation.core import gaussian_robust, masking
 class Detector:
     """
     A class for detecting the location of the ball and the board corners within an image.
-    Location coordinates are measured in pixels as (row, column).
+    All location coordinates are measured in pixels as (u, v) = (horizontal, vertical) convention,
+    with the image origin in the upper-left corner.
     """
 
     # DEBUGGING OPTIONS:
@@ -21,8 +22,8 @@ class Detector:
     CORNERS_CROP_SIZE_LARGE = 50   # The crop size to use when the current position of a corner is unknown
     CORNERS_HSV_RANGES = (         # Masking parameters used when detecting corners
         (90, 111),   # (minHue, maxHue)
-        (80, 255),  # (minSat, maxSat)
-        (15, 255)     # (minVal, maxVal)
+        (80, 255),   # (minSat, maxSat)
+        (15, 255)    # (minVal, maxVal)
     )
     CORNERS_PERCENTILE = 5        # Gaussian detection q-th percentile
     CORNERS_THRESHOLD = 0.002     # Gaussian detection threshold
@@ -44,7 +45,7 @@ class Detector:
         show_subimage_masks=False   # Whether to display the cropped subimage masks during detection
     ):
         # Store parameters in our instance vars
-        self.markers = markers[:, ::-1].astype(int)     # Convert from (horizontal, vertical) coords to (row, column)
+        self.markers = markers.astype(int)
         self.markers_are_static = markers_are_static
         self.show_subimage_masks = show_subimage_masks
 
@@ -72,12 +73,13 @@ class Detector:
 
         Args :
             frame: np.ndarray, dim: (400, 640, 3)
+                The image to process
 
         Returns :
             corners: np.ndarray, dim: (4,2)
-                     the raw image coordinates of the four corner dots in (row, column) convention.
+                The image coordinates of the four corner dots in (u, v) convention.
             ball: np.ndarray, dim: (2,)
-                     the raw image coordinates of the ball in (row, column) convention.
+                The image coordinates of the ball in (u, v) convention.
         """
 
         corners = self.detect_corners(frame)
@@ -135,7 +137,7 @@ class Detector:
 
          Args:
              im: np.ndarray
-                 image
+                 The full image
          Returns:
              An array of cropped corner subimages
              and a corresponding array of corner cropping coordinates
@@ -169,7 +171,7 @@ class Detector:
 
             if Detector.SHOW_REGIONS:
                 # Add the cropping rectangle to our list to draw
-                self.rects_to_draw.append((ul[::-1], lr[::-1], (0, 0, 255)))
+                self.rects_to_draw.append((ul, lr, (0, 0, 255)))
 
         # Return the results
         return sub_imgs, sub_coords
@@ -212,7 +214,7 @@ class Detector:
             im: np.ndarray
                 The image
         Returns:
-             The position of the ball as an ndarray (row, column)
+             The position of the ball as an ndarray in (u, v) convention
              or an array of NaN's if the position ball could not be determined.
         """
 
@@ -241,13 +243,13 @@ class Detector:
             # Get a cropped subimage based on the entire playing area
             ul, dr = self.full_board_coords
             ball_subimg, subimg_ul_coords, subimg_dr_coords = (
-                im[ul[0]:dr[0], ul[1]:dr[1], :],
+                im[ul[1]:dr[1], ul[0]:dr[0], :],
                 ul, dr
             )
 
         if Detector.SHOW_REGIONS:
             # Add the cropping rectangle to our list to draw
-            self.rects_to_draw.append((subimg_ul_coords[::-1], subimg_dr_coords[::-1], (0, 255, 0)))
+            self.rects_to_draw.append((subimg_ul_coords, subimg_dr_coords, (0, 255, 0)))
 
         # Mask the subimage using the HSV values for the ball
         _, mask = masking.mask_hsv(ball_subimg, Detector.BALL_HSV_RANGES)
@@ -281,20 +283,20 @@ class Detector:
             im: np.ndarray
                 image
             pos: np.ndarray
-                 position of the center of the subimage
+                 position of the center of the subimage in (u, v) convention
             h_p: float
-                 height of the subimage
+                 height of the subimage in pixels
             w_p: float
-                 width of the subimage
+                 width of the subimage in pixels
                  If not passed, use the height
 
         Returns :
             im_cropped: np.ndarray
                 the cropped image
             ul: np.ndarray, dim: (2,)
-                top-left corner coordinates of the cropped image
+                top-left corner coordinates of the cropped image in (u, v) convention
             dr: np.ndarray, dim: (2,)
-                down-right corner coordinates of the cropped image
+                down-right corner coordinates of the cropped image in (u, v) convention
         """
         # Get the full height and width of the original image
         h, w = im.shape[:2]
@@ -310,17 +312,17 @@ class Detector:
 
         # Calculate the coordinates of the top-left and bottom-right corners of the cropped image
         # Be sure not to exceed the bounds of the original image
-        ul_row = max(0, ceil(pos[0] - h_p / 2))
-        ul_col = max(0, ceil(pos[1] - w_p / 2))
-        dr_row = min(h, ceil(pos[0] + h_p / 2))      # 1 beyond the last row
-        dr_col = min(w, ceil(pos[1] + w_p / 2))      # 1 beyond the last column
+        ul_col = max(0, ceil(pos[0] - w_p / 2))
+        ul_row = max(0, ceil(pos[1] - h_p / 2))
+        dr_col = min(w, ceil(pos[0] + w_p / 2))      # 1 beyond the last column
+        dr_row = min(h, ceil(pos[1] + h_p / 2))      # 1 beyond the last row
 
         # Crop the image
         im_cropped = im[ul_row:dr_row, ul_col:dr_col]
 
-        # Form the cropping coordinates as (row, column)
-        ul = np.array([ul_row, ul_col])
-        dr = np.array([dr_row - 1, dr_col - 1])
+        # Form the cropping coordinates as (u, v) = (column, row)
+        ul = np.array([ul_col, ul_row])
+        dr = np.array([dr_col - 1, dr_row - 1])
 
         # Return the cropped image and cropping coordinates
         return im_cropped, ul, dr
@@ -333,7 +335,7 @@ class Detector:
         """
         cv2.circle(
             im,
-            tuple(np.round(loc).astype(int)[::-1]),   # Convert from (row, col) to (horizontal, vertical)
+            np.round(loc).astype(int),
             radius=8,
             color=(0, 0, 255),    # Red in (B,G,R)
             thickness=cv2.FILLED
@@ -345,7 +347,7 @@ class Detector:
             if self.corners_found[i]:
                 cv2.drawMarker(
                     frame,
-                    position=(round(self.corners[i, 1]), round(self.corners[i, 0])),
+                    position=np.round(self.corners[i]).astype(int),
                     color=(0, 0, 255),    # Red in (B,G,R)
                     markerType=cv2.MARKER_TILTED_CROSS,
                     markerSize=5,
@@ -357,7 +359,7 @@ class Detector:
         if self.is_ball_found:
             cv2.drawMarker(
                 frame,
-                position=tuple((np.round(self.ball_pos).astype(int))[::-1]),
+                position=np.round(self.ball_pos).astype(int),
                 color=(0, 255, 0),    # Green in (B,G,R)
                 markerType=cv2.MARKER_TILTED_CROSS,
                 markerSize=5,

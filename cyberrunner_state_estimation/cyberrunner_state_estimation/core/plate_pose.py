@@ -2,13 +2,12 @@ import os
 import cv2
 import numpy as np
 from ament_index_python.packages import get_package_share_directory
-from cyberrunner_state_estimation.utils.ocam_model import OcamModel
 
 
 class PlatePoseEstimator:
     """
-    This class defines the World, Camera, and Maze frams, and the transforms for converting between them.
-    It is also used to estimate the angles of playing board.
+    This class defines the World, Camera, and Maze frames, and the transforms for converting between them.
+    It is also used to estimate the angles of the playing board.
     """
 
     # Constants
@@ -17,7 +16,7 @@ class PlatePoseEstimator:
     L_EXT_INT_Y = 0.2706   # Length between the inner-edges of the exterior frame along the Y-axis
     C2C_X = 0.2812         # Distance between (movable) corner circle centers along X axis
     C2C_Y = 0.2367         # Distance between (movable) corner circle centers along Y axis
-    H_BORDERS = 0.0215      # Height of the maze borders (from board surface to top of the game)
+    H_BORDERS = 0.0215     # Height of the maze borders (from board surface to top of the game)
 
     MARKER_DIAM = 0.008             # Diameter of the cornet marker circles (dot stickers)
     MARKER_RAD = MARKER_DIAM / 2    # Radius of the corner marker circles (dot stickers)
@@ -53,7 +52,7 @@ class PlatePoseEstimator:
             [+C2C_X / 2, +C2C_Y / 2, H_BORDERS],  # Corner 3 (ur)
             [-C2C_X / 2, +C2C_Y / 2, H_BORDERS]   # Corner 4 (ul)
         ],
-        dtype=np.float32,
+        dtype=np.float32
     )
 
     # Similar to above, but don't include the (half-width of the) board frame in the measurements.
@@ -70,26 +69,41 @@ class PlatePoseEstimator:
     def __init__(self):
         # Read in our camera calibration data
         share = get_package_share_directory("cyberrunner_state_estimation")
-        o = OcamModel(os.path.join(share, "calib_results_cyberrunner.txt"))
-        self.o = o
+        calib_results_file = os.path.join(share, "calib_results_cyberrunner.txt")
+        with open(calib_results_file, 'r') as file:
+            lines = file.readlines()
 
-        # Scale from 1920 resolution to 640
-        o.scale(3)
-        xc, yc = o.xc, o.yc
+        # Remove all empty and commented lines
+        lines = [l for l in lines if len(l.strip()) > 0 and not l.startswith("#")]
 
-        # Define "camera intrinsic matrices" for OpenCV and Ocam
-        self.fx = 400                            # Focal length. Should be updated for your specific camera setup!
-        self.fy = 400
-        self.K = np.array([[self.fx, 0, yc],     # Ocam uses (row, col) convention for xc, yc, so we must swap them.
-                           [0, self.fy, xc],
-                           [0, 0, 1]])
-        self.K_ocam = np.array([[-self.fy, 0, xc],   # Ocam uses a reversed Z-axis, so focal length is negative (???)
-                                [0, -self.fx, yc],
-                                [0, 0, 1]])
+        # There should be exactly 4 data lines
+        assert len(lines) == 4, "Camera calibration file contents is invalid (wrong number of lines)"
 
-        # Declare other instance vars
+        # Extract the calibration data
+        img_w, img_h = (int(i) for i in lines[0].strip().split())
+        fx, fy = (float(i) for i in lines[1].strip().split())
+        cx, cy = (float(i) for i in lines[2].strip().split())
+        dist_coeff = np.array([float(i) for i in lines[3].strip().split()])
+
+        # Form the (unscaled) camera matrix (i.e., intrinsic parameter matrix)
+        camera_matrix = np.array([[fx, 0,  cx],
+                                  [0,  fy, cy],
+                                  [0,  0,  1]])
+
+        # Scale the camera_matrix down to a horizontal resolution of 640
+        camera_matrix[:2] /= (img_w // 640)
+
+        # Add 20 to cy to compensate for the 20px border we add (???)
+        camera_matrix[1, 2] += 20
+
+        # Store these camera parameters as instance vars
+        self.K = camera_matrix
+        self.dist_coeff = dist_coeff
+
+        # Declare other instance vars for transformations
         self.T__W_M = None       # The World->Maze transform
         self.T__W_C = None       # The World->Camera transform
+        self.T__C_M = None       # The Camera->Maze transform
 
     def camera_localization(self, img_fix_pts):
         """
@@ -98,27 +112,27 @@ class PlatePoseEstimator:
         Args:
            img_fix_pts: np.ndarray, dim: (4,2)
                         the raw image coordinates of the four fixed reference dots of the external frame of the labyrinth
-                        in (x,y) = (line, column) convention.
+                        in (u, v) convention.
         """
-        # Undistort the points using our camera model
-        img_points_fixed_corners_undist = self.undistort_points(img_fix_pts)  # (x,y)
-
         # Get the pose of the world frame {w} wrt the camera frame {c}
         T__C_W = self.get_pose_T__C_P(
             PlatePoseEstimator.FIXED_CORNERS_WORLD_COORDS,
-            img_points_fixed_corners_undist
+            img_fix_pts
         )
 
         # The inverse of this transform is the pose of the camera {c} wrt the world frame {w}
         self.T__W_C = self.invert_transform(T__C_W)
 
-    def estimate_angles(self, corners_undist, deg=False):
+    def estimate_angles(self, corners, deg=False):
         """
         Compute the angles that describe the orientation of the maze frame {m} wrt to the world frame {w}.
 
         Args :
-            corners_undist: np.ndarray, dim: (4,2)
-                            undistorted image coordinates of the maze corners dots in (x,y) = (line, column) convention.
+            corners: np.ndarray, dim: (4,2)
+                 Image coordinates of the maze corners dots in (u, v) convention.
+            deg: bool
+                Whether to return the angles in degrees (True) or radians (False)
+
         Returns :
             alpha: float
                     angle around -Y axis  (following the convention given in the original paper)
@@ -126,7 +140,7 @@ class PlatePoseEstimator:
                     angle around +X axis
         """
         # Get the World->Maze transformation matrix
-        self.T__W_M = self.get_maze_pose_in_world(corners_undist)
+        self.T__W_M = self.get_maze_pose_in_world(corners)
 
         # Extract the rotation matrix portion
         R = self.T__W_M[:3, :3]
@@ -149,11 +163,11 @@ class PlatePoseEstimator:
 
         Args :
             image_points: np.ndarray, dim: (4,2)
-                           undistorted image coordinates of the maze corners dots in (x,y) = (line, column) convention.
+                Image coordinates of the maze corner dots in (u, v) convention.
 
         Returns :
            T__W_M: np.ndarray, dim: (4,4)
-                  The SE(3) transform matrix describing the pose of the maze frame wrt the world frame
+                The SE(3) transform matrix describing the pose of the maze frame wrt the world frame
         """
         # Get the current Camera->Maze transformation matrix
         T__C_M = self.get_pose_T__C_P(PlatePoseEstimator.CORNERS_MAZE_COORDS, image_points)
@@ -167,23 +181,61 @@ class PlatePoseEstimator:
     # Utilities
     # --------------------------------------------------------------------------------------------------------
 
-    def undistort_points(self, img_points_raw: np.ndarray):  # (x,y)
+    def image_to_camera_coords(self, img_coords: np.ndarray):
         """
-        Undistort the points using the camera calibration data via cam2world.
+        Convert 2D image pixel coordinates to 3D camera coordinates, accounting for any lens distortion.
+        NOTE: The camera coordinates returned are "normalized" to have a Z-axis value of 1.
+        Points at other depths can easily be formed by multiplying the returned point(s) by the desired depth.
 
-        Args :
-            img_points_raw:    np.ndarray, dim: (N,2)
-                               image coordinates of the raw points in (x,y) = (line, column) convention.
-        Returns :
-            img_point_undist:  np.ndarray, dim: (N,2)
-                               image coordinates of the undistorted points in (x,y) = (line, column) convention.
+        Args:
+            img_coords: ndarray, dim: (2,) or (N, 2)
+                The 2D image coordinates to convert to camera coordinates
+                If 1D, img_coords is expected to be in (u, v) convention
+                If 2D, each row of img_coords is expected to be in (u, v) convention
 
+        Returns:
+            An ndarray of dim (3, ) or (N, 3) containing normalized 3D camera coordinates
+            If img_coords is 1D, result will be: [Xz, Yc, Zc=1]
+            If img_coords is 2D, each row of the result will be: [Xc, Yc, Zc=1]
         """
-        P_w = self.o.cam2world(img_points_raw).T  # dim: (3, N)
-        pt_undist = self.K_ocam @ P_w  # dim: (3, N)
-        pt_undist = pt_undist / pt_undist[2, :]
-        img_point_undist = pt_undist.T[:, :2]
-        return img_point_undist
+        # Convert img_coords to normalized camera coordinates
+        cam_coords = cv2.undistortPoints(img_coords, self.K, self.dist_coeff).squeeze()
+
+        # Add a Z-coordinate of 1 (normalized)
+        if cam_coords.ndim == 1:
+            cam_coords = np.append(cam_coords, 1)
+        else:
+            cam_coords = np.column_stack((cam_coords, np.ones(len(cam_coords))))
+
+        # Return the camera coordinates
+        return cam_coords
+
+    def maze_to_image_coords(self, maze_coords: np.ndarray):
+        """
+        Convert 3D coordinates in the "maze" frame to 2D image coordinates in (u, v) convention.
+        The image coordinates returned are with respect to the "distorted" (uncorrected) image.
+        This is useful to find where items in the maze frame appear in the image.
+
+        Args:
+            maze_coords: ndarray, dim:(N, 3)
+                3D coordinates in the maze frame. Each row is [Xm, Yz, Zm]
+
+        Returns:
+            An ndarray of dimension (N, 2) containing image coordinates in (u, v) convention.
+        """
+        # Get the Camera->Maze transform as rotation and translation vectors
+        rvec, _ = cv2.Rodrigues(self.T__C_M[:3, :3])
+        tvec = self.T__C_M[:3, 3]
+
+        # Project the maze coordinates into image coordinates
+        img_coords = cv2.projectPoints(maze_coords,
+                                       rvec=rvec,
+                                       tvec=tvec,
+                                       cameraMatrix=self.K,
+                                       distCoeffs=self.dist_coeff)[0].squeeze()
+
+        # Return the image coordinates
+        return img_coords
 
     def get_pose_T__C_P(
         self, model_points: np.ndarray, img_points: np.ndarray
@@ -193,22 +245,17 @@ class PlatePoseEstimator:
 
         Args :
             model_points: np.ndarray, dim: (4,3)
-                           3D coordinates of the points in their frame {p}.
+                3D coordinates of the points in their frame {p}.
             img_points: np.ndarray, dim: (4,2)
-                        undistorted image coordinates of the corresponding points in (x,y) = (line, column) convention.
+                Image coordinates of the corresponding points in (u, v) convention.
 
         Returns :
             T__C_P: np.ndarray, dim: (4,4)
                   pose in SE(3) of the frame {p} in which model points are expressed wrt to the camera frame {c}.
         """
-        # Convert the points to opencv convention: (u,v) = (column, line)
-        img_points = np.flip(
-            img_points, axis=1
-        )
-
         # Get the rotation and translation vectors for the C->P transform
         _, rotation_vec, translation_vec = cv2.solvePnP(
-            model_points, img_points, self.K, None, flags=cv2.SOLVEPNP_ITERATIVE
+            model_points, img_points, self.K, self.dist_coeff, flags=cv2.SOLVEPNP_ITERATIVE
         )
 
         # Convert the rotation vector into a standard 3x3 rotation matrix
@@ -219,7 +266,8 @@ class PlatePoseEstimator:
         T__C_P = np.vstack((T__C_P, np.array([0, 0, 0, 1])))
         return T__C_P
 
-    def invert_transform(self, T):
+    @staticmethod
+    def invert_transform(T):
         """
         Compute the inverse of the transform matrix T [4x4] in SE(3).
 

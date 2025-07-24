@@ -39,7 +39,7 @@ def detect_gaussian(mask, j, q, th, show_sub, use_contour=True):
 
             X = X[p >= perc]
 
-        c = mean
+        c = mean[::-1]
 
         if show_sub:
             im_out = np.zeros((mask.shape[0], mask.shape[1], 3), dtype="uint8")
@@ -52,12 +52,15 @@ def detect_gaussian(mask, j, q, th, show_sub, use_contour=True):
                 im_out[X[i, 0], X[i, 1], 2] = 0
 
             cv.drawMarker(
-                im_out, c.astype(int)[::-1], (255, 0, 0), cv.MARKER_TILTED_CROSS, 5, 1
+                im_out, c.astype(int), (255, 0, 0), cv.MARKER_TILTED_CROSS, 5, 1
             )
             cv.imshow("sub_" + str(j), im_out)
             cv.waitKey(1)
 
     else:
+        # Define a default center to return in the event we don't detect a contour
+        center = np.array(mask.shape[::-1]) / 2.0
+
         if j < 4:  # corners
             # cv.imshow("mask raw" + str(j), mask)
 
@@ -70,7 +73,7 @@ def detect_gaussian(mask, j, q, th, show_sub, use_contour=True):
             # TODO maybe add some dilation
             contours = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)[0]
             if len(contours) == 0:
-                c = (np.asarray(mask.shape) - 1.0) / 2.0
+                c = center
                 blob_found = False
             else:
                 contour = max(contours, key=cv.contourArea)
@@ -78,10 +81,10 @@ def detect_gaussian(mask, j, q, th, show_sub, use_contour=True):
                 if M["m00"] != 0:
                     cx = M["m10"] / M["m00"]
                     cy = M["m01"] / M["m00"]
-                    c = np.array([cy, cx])
+                    c = np.array([cx, cy])
                     blob_found = True
                 else:
-                    c = (np.asarray(mask.shape) - 1.0) / 2.0
+                    c = center
                     blob_found = False
 
         else:  # ball
@@ -98,7 +101,7 @@ def detect_gaussian(mask, j, q, th, show_sub, use_contour=True):
 
             contours = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)[0]
             if len(contours) == 0:
-                c = np.asarray(mask.shape) / 2.0
+                c = center
                 blob_found = False
             else:
                 contour = max(contours, key=cv.contourArea)
@@ -117,12 +120,12 @@ def detect_gaussian(mask, j, q, th, show_sub, use_contour=True):
                 if M["m00"] != 0 and circularity > 0.12 and area > 110:
                     cx = M["m10"] / M["m00"]
                     cy = M["m01"] / M["m00"]
-                    c = np.array([cy, cx])
+                    c = np.array([cx, cy])
                     blob_found = True
                     # print("circularity", circularity)
                     # print("center", c)
                 else:
-                    c = np.asarray(mask.shape) / 2.0
+                    c = center
                     blob_found = False
 
         if show_sub:

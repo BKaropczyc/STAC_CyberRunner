@@ -47,13 +47,14 @@ class Measurements:
 
         # Debugging options
         if Measurements.SHOW_UNDISTORTED_FRAME:
-            # Get all image coordinates
-            h, w = (400, 640)
-            all_img_pts = np.array(list(np.ndindex((h, w))))
-            # Get the undistorted coordinates of every pixel
-            undistorted_coords = self.plate_pose.undistort_points(all_img_pts)
-            # Convert the coordinates for use with the remap() function
-            self.undistorted_coords = undistorted_coords[:, ::-1].reshape(h, w, 2).astype(np.float32)
+            # Calculate the maps to undistort the image
+            map1, map2 = cv2.initUndistortRectifyMap(self.plate_pose.K,
+                                                     self.plate_pose.dist_coeff,
+                                                     R=None,
+                                                     newCameraMatrix=None,
+                                                     size=(640, 400),
+                                                     m1type=cv2.CV_32FC1)
+            self.undistort_maps = (map1, map2)
 
         if Measurements.SHOW_PATH:
             # Load the maze path waypoint coordinates
@@ -64,12 +65,11 @@ class Measurements:
             center = np.array([0.276, 0.231]) / 2.0
             maze_pts = waypoints - center
 
-            # Create full homogeneous coordinates, each row is a 3D point in the maze frame
-            maze_coords = np.zeros((len(maze_pts), 4))
-            maze_coords[:, :2] = maze_pts
-            maze_coords[:, 2] = PlatePoseEstimator.BALL_RAD     # Assume the path sits at the ball's radius
-            maze_coords[:, 3] = 1.0       # Homogeneous coordinates
-            self.maze_coords = maze_coords
+            # Create full coordinates for the waypoints, each row is a 3D point in the maze frame
+            path_coords = np.zeros((len(maze_pts), 3))
+            path_coords[:, :2] = maze_pts
+            path_coords[:, 2] = 0     # Visualize the path sitting on the playing surface, Z=0
+            self.path_coords = path_coords
 
         # Create our subimage mask windows
         if show_subimage_masks:
@@ -107,7 +107,8 @@ class Measurements:
 
         if Measurements.SHOW_UNDISTORTED_FRAME:
             # Display the undistorted frame
-            undistorted_img = cv2.remap(frame, self.undistorted_coords, map2=None, interpolation=cv2.INTER_LINEAR)
+            map1, map2 = self.undistort_maps
+            undistorted_img = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR)
             cv2.imshow("Undistorted Frame", undistorted_img)
             cv2.waitKey(1)
 
@@ -115,27 +116,18 @@ class Measurements:
         frame = cv2.bitwise_and(frame, frame, mask=self.mask)
 
         # Determine the coordinates of the (moveable) corners and the ball within the image
-        # All coordinates are in (row, column) format
+        # All coordinates are in (u, v) convention
         corners_img_coords, ball_img_coords = self.detector.process_frame(frame)
         self.ball_img_coords = ball_img_coords
-
-        # Undistort all of these points using the camera calibration data
-        # These coordinates are still wrt the camera image
-        raw_pts = np.vstack((corners_img_coords, ball_img_coords))
-        undist_pts = self.plate_pose.undistort_points(raw_pts)
-        corners_undistorted = undist_pts[:4, :]
-        ball_undistorted = undist_pts[4, :]
 
         # Estimate the angles of the playing surface from the locations of the corners in the image
         # Alpha is the angle of the longer (horizontal) axis, around the -Y axis
         # Beta is the angle of the shorter (vertical) axis, around the +X axis
-        alpha, beta = self.plate_pose.estimate_angles(corners_undistorted)
+        alpha, beta = self.plate_pose.estimate_angles(corners_img_coords)
         self.plate_angles = (alpha, beta)
 
         # Compute the 3D position of the ball in the maze frame {m}
-        self.ball_pos = self.ball_pos_backproject(
-            ball_undistorted, self.plate_pose.K, self.plate_pose.T__C_M
-        )
+        self.ball_pos = self.ball_pos_backproject(ball_img_coords)
 
         # Generate the ball sub-image, if requested
         if get_ball_subimg:
@@ -149,21 +141,14 @@ class Measurements:
         self.update_3d_anim(self.anim_3d_side)
 
         if Measurements.SHOW_PATH:
-            # Draw the maze path superimposed on the image
-
-            # Transform the maze waypoints into 3D camera coordinates
-            cam_coords = (self.plate_pose.T__C_M @ self.maze_coords.T).T[:, :3]
-
-            # Transform these camera coordinates into image coordinates
-            img_coords = (self.plate_pose.K @ cam_coords.T).T
-            img_coords /= img_coords[:, 2:]    # Normalize depth
-            img_coords = img_coords[:, :2]     # Just keep (u, v)
+            # Get image coordinates for the path waypoints
+            img_coords = self.plate_pose.maze_to_image_coords(self.path_coords)
 
             # Use sub-pixel precision to draw the maze path
             shift_bits = 4
             img_coords = (img_coords * 2 ** shift_bits).astype(int)
 
-            # Draw the path on a copy of the frame
+            # Draw the maze path superimposed on a copy of the frame
             path_frame = frame.copy()
             for pt1, pt2 in zip(img_coords, img_coords[1:]):
                 cv2.line(path_frame, pt1, pt2,
@@ -196,24 +181,17 @@ class Measurements:
             x_coords = np.linspace(start=-32, stop=31, num=img_size) * 1.0e-3 + self.ball_pos[0]
             y_coords = np.linspace(start=32, stop=-31, num=img_size) * 1.0e-3 + self.ball_pos[1]
 
-            # Create the homogeneous coordinates, each row is a point in the maze frame
-            maze_coords = np.zeros((img_size ** 2, 4))
+            # Create the coordinates array, each row is a point in the maze frame
+            maze_coords = np.zeros((img_size ** 2, 3))
             maze_coords[:, 0] = np.tile(x_coords, img_size)  # X-coord
             maze_coords[:, 1] = np.repeat(y_coords, img_size)  # Y-coord
             maze_coords[:, 2] = self.ball_pos[2]  # Z-coord
-            maze_coords[:, 3] = 1.0  # Homogeneous coordinates
 
-            # Transform these points into 3D camera coordinates
-            cam_coords = (self.plate_pose.T__C_M @ maze_coords.T).T[:, :3]
+            # Get image coordinates corresponding to each of the maze frame coordinates
+            img_coords = self.plate_pose.maze_to_image_coords(maze_coords)
 
-            # Transform these camera coordinates into image coordinates
-            cam_coords[:, [0, 1]] = cam_coords[:, [1, 0]]  # Not sure why we need this line and the next!
-            cam_coords[:, 2] *= -1  # Are the coords expected by world2cam() different???
-            img_coords = self.plate_pose.o.world2cam(cam_coords)
-
-            # Map these frame coordinates into a new image
-            # Since we'll be indexing into a NumPy array, we must swap back to (row, col) convention
-            img_coords = img_coords[:, ::-1].reshape(64, 64, 2).astype(np.float32)
+            # Map these coordinates in the frame into a new image
+            img_coords = img_coords.reshape(64, 64, 2).astype(np.float32)
             subimg = cv2.remap(frame, img_coords, map2=None, interpolation=cv2.INTER_LINEAR)
 
             # Return the sub-image
@@ -231,7 +209,7 @@ class Measurements:
 
         Returns:
             ball_pos: np.ndarray, dim: (2,)
-                2d position of the ball in the image frame.
+                2d position of the ball in the image frame in (u, v) convention.
         """
         return self.ball_img_coords
 
@@ -298,23 +276,17 @@ class Measurements:
         # Generate a list of all image coordinates
         h, w = frame.shape[:2]
         coords = np.array(list(np.ndindex((h, w))))
+        coords = coords.astype(float)[:, [1, 0]]   # We need these as (u, v) floating-point values
 
-        # Get 3D camera frame coordinates for every pixel
-        camera_points = self.plate_pose.o.cam2world(coords)
+        # Get (normalized) 3D camera frame coordinates for every pixel
+        camera_points = self.plate_pose.image_to_camera_coords(coords)
 
-        # Again, I'm not sure why we need the following two lines
-        # They appear to re-interpret the camera frame coordinates
-        camera_points[:, [0, 1]] = camera_points[:, [1, 0]]
-        camera_points[:, 2] *= -1
+        # Define the known depth of these points
+        camera_points *= self.plate_pose.T__W_C[2, -1]   # Z-coordinate of the camera in the world frame
 
-        # Transform these camera coordinates to world coordinates,
-        # and project them all to the Z=0 plane in the world frame.
-        world_vec = (self.plate_pose.T__W_C[:3, :3] @ camera_points.T).T    # Perform just the rotation first
-        world_vec = world_vec / world_vec[:, 2:]           # Normalize all coordinates to have Z=1
-        world_points = (                                   # Scale by the negative Z-translation and translate
-            world_vec * (-self.plate_pose.T__W_C[2, -1])   # This will leave all Z-coordinates at 0
-            + self.plate_pose.T__W_C[:3, -1]
-        )
+        # Transform these camera coordinates to world coordinates
+        camera_points_h = np.column_stack((camera_points, np.ones(len(camera_points))))
+        world_points = (self.plate_pose.T__W_C @ camera_points_h.T).T
 
         # Determine which world points are within the bounds of the game
         mask = ((world_points[:, 0] >= -self.plate_pose.MARKER_DIAM)
@@ -325,17 +297,13 @@ class Measurements:
         # Create a mask for these points, with value 255 for all pixels to keep
         self.mask = 255 * mask.reshape(h, w, 1).astype(np.uint8)
 
-    def ball_pos_backproject(self, ball_undistorted, K, T__C_M):
+    def ball_pos_backproject(self, ball_img_coords):
         """
         Compute the 3D position of the ball in the maze frame {m}.
 
         Args:
-            ball_undistorted: np.ndarray, dim: (2,)
-                The undistorted pixel coordinates of the ball in (row, col) convention
-            K: np.ndarray, dim: (3, 3)
-                The camera's intrinsic matrix
-            T__C_M: np.ndarray, dim: (4, 4)
-                The transform matrix from maze coordinates to camera coordinates
+            ball_img_coords: np.ndarray, dim: (2,)
+                The pixel coordinates of the ball in (u, v) convention
 
         Returns:
             x_M: np.ndarray, dim: (3,)
@@ -344,53 +312,48 @@ class Measurements:
                  by assumption of constant contact with the maze: z__m_b = ball_radius.
         """
         # If the ball was not located in the image, return NaN's (unknown)
-        if np.any(np.isnan(ball_undistorted)):
+        if np.any(np.isnan(ball_img_coords)):
             return np.array([np.nan, np.nan, np.nan])
 
-        v, u = ball_undistorted    # Convert from (row, col) to (u, v) convention
+        # Get the (normalized) camera coordinates for the location of the ball
+        xc, yc, _ = self.plate_pose.image_to_camera_coords(ball_img_coords)
         d = PlatePoseEstimator.BALL_RAD
 
         # EXPLANATION:
-        # We want to find the ball's position in maze coordinates, given its pixel coordinates in the image.
+        # We want to find the ball's position in maze coordinates, given its camera coordinates.
         # A good explanation of the math used here is available at:
         # https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html
-        # NOTES: Our 'K' matrix is referred to as A in the above description, and we're using the maze frame
-        # as our "world" coordinates.
+        # NOTES: Our 'K' matrix is referred to as A in the above description.
 
-        # If p is the homogeneous representation of the image coordinates (i.e., [u, v, 1]),
-        # and Pm is the homogeneous vector in maze coordinates,
-        # the normal "forward projection" from maze coordinates to image coordinates would be accomplished by:
+        # Let H be the transform matrix that converts coordinates in the Maze frame to coordinates in the Camera frame.
+        # We need to solve the equation:
         #
-        #          s p = K [R|t] Pm
-        #
-        # Here, s is an arbitrary scaling factor, and [R|t] is the rotation matrix and translation vector for
-        # converting maze coordinates to camera coordinates. (This is just the normal transform matrix without
-        # the final row of [0, 0, 0, 1])
+        #     H Pm = s Pc      where Pm is the ball's coordinates in the maze frame: [Xm, Ym, Zm, 1]
+        #                            Pc is the ball's coordinates in the camera frame: [Xc, Yc, 1]
+        #                        and s is a scaling factor that defines the depth of the point in the camera frame (Zc)
 
-        # In our case, we're given p, K, and [R|t], and need to solve for Pm.
-        # Below, we refer to the product: K [R|t] as the matrix H for convenience.
         # However, we impose an additional constraint on the equations - we know the Z-coordinate of Pm,
         # which is fixed to the ball's radius (d), since we assume that the ball is in contact with the maze.
-        # Thus, we want to fix Pm_z, and solve for Pm_x and Pm_y only.
+        # Thus, we want to fix Zm, and solve for Xm and Ym only.
 
-        # Thus, if we define Pm as [Px, Py, d, 1] (a homogeneous vector), we have the equation:
+        # Thus, if we define Pm as [Xm, Ym, d, 1] (a homogeneous vector), we have the equation:
         #
-        #         H Pm = s p                 Recall: p = [u, v, 1]^T
+        #         H Pm = s Pc
         #
-        # This system has 3 equations and 3 unknowns (Px, Py, and s).
+        # This system has 3 equations and 3 unknowns (Xm, Ym, and s).
         # To solve it, we can first use the last equation implied by this system to solve for s.
         # The last equation implied by this system is:
         #
-        #         h_31*Px + h_32*Py + h33_d + h34 = s
+        #         h_31*Xm + h_32*Ym + h33_d + h34 = s
         #
         # We can now substitute this expression for s on the right-hand side of the first two equations to eliminate s,
-        # and solve the remaining two equations for the other unknowns: Px and Py
-        # Multiplying out the expressions and gathering the terms for Px and Py on the left-hand side
-        # (and moving all other terms only involving H, d, u, and v to the right-hand side),
-        # we end up with a set of two equations in two unknowns (Px and Py) which we can solve using NumPy.
+        # and solve the remaining two equations for the other unknowns: Xm and Ym
+        # Multiplying out the expressions and gathering the terms for Xm and Ym on the left-hand side
+        # (and moving all other terms only involving H, d, Xc, and Yc to the right-hand side),
+        # we end up with a set of two equations in two unknowns (Xm and Ym) which we can solve using NumPy.
 
-        # Define H = K [R|t], and get vars for its individual elements
-        H = K @ T__C_M[:3, :]
+        # Define H = first 3 rows of T__C_M, and get vars for its individual elements
+        H = self.plate_pose.T__C_M[:3, :]
         h_11, h_12, h_13, h_14 = H[0, :]
         h_21, h_22, h_23, h_24 = H[1, :]
         h_31, h_32, h_33, h_34 = H[2, :]
@@ -398,20 +361,20 @@ class Measurements:
         # Form the 2x2 matrix A implied by the final two equations as described above:
         # NOTE: this only uses terms from the first-two columns of H, as expected
         A = np.array(
-            [[u * h_31 - h_11, u * h_32 - h_12],
-             [v * h_31 - h_21, v * h_32 - h_22]]
+            [[h_11 - h_31 * xc, h_12 - h_32 * xc],
+             [h_21 - h_31 * yc, h_22 - h_32 * yc]]
         )
 
         # Form the right-hand side of the system as described above
-        # NOTE: the right-hand side only includes known terms: H, d, u, and v, as expected
+        # NOTE: the right-hand side only includes known terms: H, d, Xc, and Yc, as expected
         b = np.array(
             [
-                d * h_13 + h_14 - d * u * h_33 - u * h_34,
-                d * h_23 + h_24 - d * v * h_33 - v * h_34
+                h_33 * d * xc + h_34 * xc - h_13 * d - h_14,
+                h_33 * d * yc + h_34 * yc - h_23 * d - h_24
             ]
         )
 
-        # Solve this system for the 2 unknowns, which represent the ball's coordinates in the maze frame: Px and Py
+        # Solve this system for the 2 unknowns, which represent the ball's coordinates in the maze frame: Xm and Ym
         x = np.linalg.solve(A, b)
 
         # Return the 3D coordinates of the ball in the maze frame
