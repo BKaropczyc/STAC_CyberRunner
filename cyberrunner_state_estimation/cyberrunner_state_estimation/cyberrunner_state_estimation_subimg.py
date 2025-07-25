@@ -39,7 +39,7 @@ class ImageSubscriber(Node):
         self.estimation_pipeline = EstimationPipeline(
             fps=55.0,
             estimator="KF",  #  "FiniteDiff",  "KF", "KFBias"
-            print_measurements=True,
+            print_measurements=False,
             show_3d_anim=False,
             viewpoint="top",  # 'top', 'side', 'topandside'
             show_subimage_masks=False
