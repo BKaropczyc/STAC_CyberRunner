@@ -43,8 +43,6 @@ class ImageSubscriber(Node):
 
         # Create the state estimation pipeline, which does the heavy lifting
         self.estimation_pipeline = EstimationPipeline(
-            fps=55.0,
-            estimator="KF",  #  "FiniteDiff",  "KF", "KFBias"
             print_measurements=False,
             show_3d_anim=False,
             viewpoint="top",  # 'top', 'side', 'topandside'
@@ -61,7 +59,7 @@ class ImageSubscriber(Node):
         frame = self.br.imgmsg_to_cv2(data)
 
         # Extract state information from the image
-        ball_pos, board_angles, x_hat, subimg = self.estimation_pipeline.estimate(
+        ball_pos, board_angles, subimg = self.estimation_pipeline.estimate(
             frame, return_ball_subimg=True
         )
 
@@ -71,8 +69,6 @@ class ImageSubscriber(Node):
             msg = StateEstimateSub()
             msg.state.x_b = ball_pos[0]
             msg.state.y_b = ball_pos[1]
-            msg.state.x_b_dot = x_hat[2]           # Do we use the velocities???
-            msg.state.y_b_dot = x_hat[3]           # I thought a recurrent policy didn't use them at all!
             msg.state.alpha = board_angles[0]
             msg.state.beta = board_angles[1]
             msg.subimg = self.br.cv2_to_imgmsg(subimg)
