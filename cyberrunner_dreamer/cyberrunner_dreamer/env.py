@@ -24,7 +24,8 @@ class CyberrunnerGym(gym.Env):
         num_rel_path=5,
         num_wait_steps=30,
         reward_on_fail=0.0,
-        reward_on_goal=0.5
+        reward_on_goal=0.5,
+        send_actions=True
     ):
         super().__init__()
         if not rclpy.ok():
@@ -77,6 +78,7 @@ class CyberrunnerGym(gym.Env):
         self.cheat = False       # Whether the agent is allowed to cheat
         self.obs = dict(self.observation_space.sample())    # The most recent (valid) observation
         self.num_rel_path = num_rel_path    # Number of points along the path to include in the "goal" field
+        self.send_actions = send_actions   # Set False to disable sending messages to the servos, for debugging
 
         # Set up normalization constants for our state and goal observations
         # Incoming observations will be divided by these to yield "relative" observations
@@ -277,11 +279,12 @@ class CyberrunnerGym(gym.Env):
 
     def _reset_board(self):
         # Send a request to put the playing surface in a starting position
-        req = DynamixelReset.Request()
-        future = self.client.call_async(req)
+        if self.send_actions:
+            req = DynamixelReset.Request()
+            future = self.client.call_async(req)
 
-        # Wait for board reset to be finished
-        rclpy.spin_until_future_complete(self.node, future, timeout_sec=2)
+            # Wait for board reset to be finished
+            rclpy.spin_until_future_complete(self.node, future, timeout_sec=5)
 
     def _send_action(self, action):
         # Scale the action
@@ -290,11 +293,12 @@ class CyberrunnerGym(gym.Env):
         vel_1 = self.alpha_fac * action[0]  # TODO define these as parameters
         vel_2 = self.beta_fac * action[1]
 
-        # To message and publish
+        # Convert to message and publish
         msg = DynamixelVel()
         msg.vel_1 = vel_1
         msg.vel_2 = vel_2
-        self.publisher.publish(msg)
+        if self.send_actions:
+            self.publisher.publish(msg)
 
     def _get_obs(self):
         # Until we have a new observation...

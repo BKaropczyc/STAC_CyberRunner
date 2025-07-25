@@ -8,7 +8,7 @@ filterwarnings(action='ignore', category=DeprecationWarning, message=".* old ste
 
 def main():
     # Initialize our environment
-    env = gym.make("cyberrunner_dreamer:cyberrunner-ros-v0", new_step_api=False)
+    env = gym.make("cyberrunner_dreamer:cyberrunner-ros-v0", new_step_api=False, send_actions=False)
     env.action_space.seed(42)
 
     # Start a basic environment-interaction loop
