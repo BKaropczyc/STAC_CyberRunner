@@ -14,11 +14,15 @@ import time
 import cv2
 import os
 from ament_index_python.packages import get_package_share_directory
+from typing import Optional
 
 
 class CyberrunnerGym(gym.Env):
+    metadata = {"render_modes": ["human", "single_rgb_array"], "render_fps": 30}
+
     def __init__(
         self,
+        render_mode: Optional[str] = None,
         repeat=1,
         layout=cyberrunner_layout.cyberrunner_hard_layout,
         num_rel_path=5,
@@ -46,6 +50,7 @@ class CyberrunnerGym(gym.Env):
         self.action_space = gym.spaces.Box(-1.0, 1.0, (2,))  # A relative current command for each servo
 
         # Initialize our instance variables
+        self.render_mode = render_mode
         self.br = CvBridge()
         self.repeat = repeat     # The number of times our ROS node will 'spin' to get each new observation
         self.offset = np.array([0.276, 0.231]) / 2.0    # Move the origin for ball positions to the lower-left corner of the maze
@@ -251,7 +256,10 @@ class CyberrunnerGym(gym.Env):
         return obs, reward, done, info
 
     def render(self, mode="human"):
-        if mode == "rgb_array" or mode == "human":
+        # NOTE: Keyword arg mode is deprecated and will be removed in later versions.
+
+        mode = self.render_mode
+        if mode == "single_rgb_array" or mode == "human":
             # Determine the current call position
             ball_pos = None
             if self.ball_detected:
@@ -270,6 +278,8 @@ class CyberrunnerGym(gym.Env):
                 cv2.waitKey(1)
             else:
                 return frame
+        elif mode is None:
+            return
         else:
             super().render(mode=mode)  # Raise an exception
 
