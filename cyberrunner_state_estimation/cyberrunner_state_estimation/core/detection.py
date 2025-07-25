@@ -192,7 +192,7 @@ class Detector:
         # invalidate the result. (We likely mistook the ball for the corner marker...)
         if found:
             dist_to_orig_marker = np.linalg.norm(c - self.markers[i, :])
-            if dist_to_orig_marker > 30.0:
+            if dist_to_orig_marker > 40.0:
                 # Our result is invalid
                 found = False
 
