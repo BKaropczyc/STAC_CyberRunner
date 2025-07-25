@@ -15,6 +15,11 @@ from cyberrunner_interfaces.msg import StateEstimateSub
 
 class ImageSubscriber(Node):
     """A ROS Node for listening to images from the camera and publishing messages describing the system's physical state"""
+
+    # DEBUGGING OPTIONS
+    # Set BROADCAST_TRANSFORMS to True to broadcast our frame transforms using the ROS tf system
+    BROADCAST_TRANSFORMS = False
+
     def __init__(self, skip=1):
         super().__init__("cyberrunner_state_estimation")
 
@@ -29,9 +34,10 @@ class ImageSubscriber(Node):
             StateEstimateSub, topic="cyberrunner_state_estimation/estimate_subimg", qos_profile=10
         )
 
-        # Create our coordinate space transform broadcasters
-        self.tf_static_broadcaster = StaticTransformBroadcaster(self)
-        self.tf_broadcaster = TransformBroadcaster(self)
+        if ImageSubscriber.BROADCAST_TRANSFORMS:
+            # Create our coordinate space transform broadcasters
+            self.tf_static_broadcaster = StaticTransformBroadcaster(self)
+            self.tf_broadcaster = TransformBroadcaster(self)
 
         self.br = CvBridge()   # For converting ROS Image messages <-> OpenCV images
 
@@ -75,46 +81,46 @@ class ImageSubscriber(Node):
             self.publisher.publish(msg)
 
         # Broadcast coordinate space transforms
+        if ImageSubscriber.BROADCAST_TRANSFORMS:
+            # The Camera -> World transform is assumed to be static,
+            # and thus it is only broadcast ONCE (on the first message)
+            if self.count == 0:
+                t = self.transform_matrix_to_msg(
+                    self.estimation_pipeline.measurements.plate_pose.T__W_C,
+                    frame_id='world',
+                    child_frame_id='camera'
+                )
+                self.tf_static_broadcaster.sendTransform(t)
 
-        # The Camera -> World transform is assumed to be static,
-        # and thus it is only broadcast ONCE (on the first message)
-        if self.count == 0:
-            t = self.transform_matrix_to_msg(
-                self.estimation_pipeline.measurements.plate_pose.T__W_C,
+            # The other transforms change with each new state,
+            # and thus must be continuously broadcast.
+            transform_msgs = []
+
+            # Maze -> World transform
+            t_maze = self.transform_matrix_to_msg(
+                self.estimation_pipeline.measurements.plate_pose.T__W_M,
                 frame_id='world',
-                child_frame_id='camera'
+                child_frame_id='maze'
             )
-            self.tf_static_broadcaster.sendTransform(t)
+            transform_msgs.append(t_maze)
 
-        # The other transforms change with each new state,
-        # and thus must be continuously broadcast.
-        transform_msgs = []
+            # Maze -> Ball transform
+            # Only broadcast this transform if we know where the ball is currently located in the maze frame
+            ball_pos = self.estimation_pipeline.measurements.get_ball_position_in_maze()
+            if np.all(np.isfinite(ball_pos)):
+                # This is a translation-only transform
+                T__M_B = np.eye(4)
+                T__M_B[:3, -1] = ball_pos
 
-        # Maze -> World transform
-        t_maze = self.transform_matrix_to_msg(
-            self.estimation_pipeline.measurements.plate_pose.T__W_M,
-            frame_id='world',
-            child_frame_id='maze'
-        )
-        transform_msgs.append(t_maze)
+                t_ball = self.transform_matrix_to_msg(
+                    T__M_B,
+                    frame_id='maze',
+                    child_frame_id='ball'
+                )
+                transform_msgs.append(t_ball)
 
-        # Maze -> Ball transform
-        # Only broadcast this transform if we know where the ball is currently located in the maze frame
-        ball_pos = self.estimation_pipeline.measurements.get_ball_position_in_maze()
-        if np.all(np.isfinite(ball_pos)):
-            # This is a translation-only transform
-            T__M_B = np.eye(4)
-            T__M_B[:3, -1] = ball_pos
-
-            t_ball = self.transform_matrix_to_msg(
-                T__M_B,
-                frame_id='maze',
-                child_frame_id='ball'
-            )
-            transform_msgs.append(t_ball)
-
-        # Broadcast the dynamic transforms
-        self.tf_broadcaster.sendTransform(transform_msgs)
+            # Broadcast the dynamic transforms
+            self.tf_broadcaster.sendTransform(transform_msgs)
 
         # We've processed one more frame
         self.count += 1
