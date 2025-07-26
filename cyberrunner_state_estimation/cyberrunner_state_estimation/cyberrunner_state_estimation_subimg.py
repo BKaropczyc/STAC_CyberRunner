@@ -1,23 +1,29 @@
 #!usr/bin/env python3
 
+import os
+import numpy as np
+
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from cyberrunner_interfaces.msg import StateEstimateSub
 from cv_bridge import CvBridge
-import numpy as np
+
+from cyberrunner_state_estimation.core.measurements import Measurements
+from ament_index_python.packages import get_package_share_directory
 from scipy.spatial.transform import Rotation
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
-from cyberrunner_state_estimation.core.estimation_pipeline import EstimationPipeline
-from cyberrunner_interfaces.msg import StateEstimateSub
 
 
 class ImageSubscriber(Node):
     """A ROS Node for listening to images from the camera and publishing messages describing the system's physical state"""
 
     # DEBUGGING OPTIONS
+    # Set PRINT_MEASUREMENTS to True to display the measurements extracted from each frame
     # Set BROADCAST_TRANSFORMS to True to broadcast our frame transforms using the ROS tf system
+    PRINT_MEASUREMENTS = False
     BROADCAST_TRANSFORMS = False
 
     def __init__(self, skip=1):
@@ -41,13 +47,20 @@ class ImageSubscriber(Node):
 
         self.br = CvBridge()   # For converting ROS Image messages <-> OpenCV images
 
-        # Create the state estimation pipeline, which does the heavy lifting
-        self.estimation_pipeline = EstimationPipeline(
-            print_measurements=False,
-            show_3d_anim=False,
-            viewpoint="top",  # 'top', 'side', 'topandside'
-            show_subimage_masks=False
+        # Read in the markers.csv data generated during the "select_markers" calibration step
+        share = get_package_share_directory("cyberrunner_state_estimation")
+        markers = np.loadtxt(os.path.join(share, "markers.csv"), delimiter=",")
+
+        # Create the measurements object, which does the heavy lifting of state estimation
+        self.measurements = Measurements(
+            markers=markers,
+            show_3d_anim=False,         # Whether to display a 3D visualization of the estimated physical state
+            viewpoint="top",            # The view to use for the 3D visualization: 'top', 'side', or 'topandside'
+            show_subimage_masks=False   # Whether the Detector object should show the subimage masks
         )
+
+        if ImageSubscriber.PRINT_MEASUREMENTS:
+            np.set_printoptions(precision=3, floatmode="fixed", suppress=True, sign=" ", nanstr="  nan ")
 
         self.skip = skip   # Number of frames to skip when publishing (1 = publish every frame)
         self.count = 0     # Count of frames processed
@@ -59,14 +72,20 @@ class ImageSubscriber(Node):
         frame = self.br.imgmsg_to_cv2(data)
 
         # If we haven't fully localized the camera yet, use this frame for camera localization
-        if not self.estimation_pipeline.measurements.camera_localized:
-            self.estimation_pipeline.measurements.camera_localization(frame)
+        if not self.measurements.camera_localized:
+            self.measurements.camera_localization(frame)
             return
 
         # Extract state information from the image
-        ball_pos, board_angles, subimg = self.estimation_pipeline.estimate(
-            frame, return_ball_subimg=True
-        )
+        self.measurements.process_frame(frame, get_ball_subimg=True)
+        # ...and get the results
+        ball_pos = self.measurements.get_ball_position_in_maze()[:2]   # We only care about the X and Y coords
+        board_angles = self.measurements.get_plate_pose()
+        subimg = self.measurements.get_ball_subimg()
+
+        # Print out the calculated measurements
+        if self.PRINT_MEASUREMENTS:
+            print(f"ball_pos: {ball_pos} (m)  |  board_angles: {np.rad2deg(board_angles)} (deg)")
 
         # Only publish every <skip> messages
         if self.count % self.skip == 0:
@@ -87,7 +106,7 @@ class ImageSubscriber(Node):
             # and thus it is only broadcast ONCE (on the first message)
             if self.count == 0:
                 t = self.transform_matrix_to_msg(
-                    self.estimation_pipeline.measurements.plate_pose.T__W_C,
+                    self.measurements.plate_pose.T__W_C,
                     frame_id='world',
                     child_frame_id='camera'
                 )
@@ -99,7 +118,7 @@ class ImageSubscriber(Node):
 
             # Maze -> World transform
             t_maze = self.transform_matrix_to_msg(
-                self.estimation_pipeline.measurements.plate_pose.T__W_M,
+                self.measurements.plate_pose.T__W_M,
                 frame_id='world',
                 child_frame_id='maze'
             )
@@ -107,7 +126,7 @@ class ImageSubscriber(Node):
 
             # Maze -> Ball transform
             # Only broadcast this transform if we know where the ball is currently located in the maze frame
-            ball_pos = self.estimation_pipeline.measurements.get_ball_position_in_maze()
+            ball_pos = self.measurements.get_ball_position_in_maze()
             if np.all(np.isfinite(ball_pos)):
                 # This is a translation-only transform
                 T__M_B = np.eye(4)
