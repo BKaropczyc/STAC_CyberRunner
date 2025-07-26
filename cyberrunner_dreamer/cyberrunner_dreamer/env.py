@@ -74,7 +74,8 @@ class CyberrunnerGym(gym.Env):
         self.episodes = 0        # Number of total episodes started
         self.steps = 0           # Number of steps taken in the current episode
         self.accum_reward = 0.0  # The sum of all rewards in the current episode
-        self.last_time = 0       # The last time we completed a step
+        self.recent_steps = 0    # The number of steps taken recently, for speed calculation
+        self.start_time = 0      # The beginning of our step speed monitoring window
         self.progress = 0        # The progress made toward the goal from the most recent action
         self.success = False     # Did we achieve the goal state?
         self.off_path = False    # Is the marble too far off the specified path?
@@ -181,12 +182,15 @@ class CyberrunnerGym(gym.Env):
 
         # Initialize prev_path_pos
         self.prev_path_pos = self.p.closest_point(obs["states"][2:4])[0]
-        self.last_time = time.time()
 
         # Finalize and return the observation
         self._normalize_obs(obs)
         obs["progress"] = np.asarray([1 + self.prev_path_pos], dtype=np.float32)
         obs["log_reward"] = np.array([0], dtype=np.float32)
+
+        # Prepare to monitor our stepping speed
+        self.recent_steps = 0
+        self.start_time = time.time()
 
         if return_info:
             info_dict = {}   # Currently unused
@@ -199,6 +203,7 @@ class CyberrunnerGym(gym.Env):
 
         # We've taken one more step this episode
         self.steps += 1
+        self.recent_steps += 1
 
         # Send action to Dynamixel
         # If we can cheat, and we're close to the goal...
@@ -235,12 +240,6 @@ class CyberrunnerGym(gym.Env):
             print(f"  Episode length: {self.steps} steps")
             print(f"  Total accumulated reward: {self.accum_reward:0.4f}")
 
-        # Output a warning if we're stepping too slowly
-        now = time.time()
-        if self.last_time and ((now - self.last_time) > (1.0 / 35.0)):
-            print("WARNING: stepping slower than 35fps")
-        self.last_time = now
-
         # Define our "info" dictionary
         if self.success:
             info = {"is_terminal": False}
@@ -251,6 +250,18 @@ class CyberrunnerGym(gym.Env):
         self._normalize_obs(obs)
         obs["progress"] = np.asarray([1 + self.prev_path_pos], dtype=np.float32)
         obs["log_reward"] = np.asarray([reward if not done else 0], dtype=np.float32)
+
+        # Output a warning if we are stepping too slowly
+        now = time.time()
+        dur = now - self.start_time
+        if dur > 1.0:   # Check our stepping speed every ~1 second
+            steps_per_second = self.recent_steps / dur
+            if steps_per_second < 55.0:
+                print(f"WARNING: stepping slower than 55fps: {steps_per_second:0.2f} fps")
+
+            # Reset our count
+            self.recent_steps = 0
+            self.start_time = now
 
         # Return the step results
         return obs, reward, done, info
