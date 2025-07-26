@@ -265,13 +265,13 @@ class CyberrunnerGym(gym.Env):
             if self.ball_detected:
                 ball_pos = self.obs["states"][2:]
 
-            # Determine the closest path point
-            path_pos = None
-            if self.prev_path_pos >= 0:
-                path_pos = self.p.points[self.prev_path_pos]
+            # Determine the relative path toward the goal
+            rel_path = None
+            if self.ball_detected and not self.off_path:
+                rel_path = self.obs["goal"].reshape(-1, 2)
 
             # Get a visualization of the current state of the system
-            frame = self.renderer.get_image(ball_pos, self.off_path, path_pos)
+            frame = self.renderer.get_image(ball_pos, self.off_path, rel_path)
 
             if mode == "human":
                 cv2.imshow("Layout", frame)

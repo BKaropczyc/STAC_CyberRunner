@@ -33,7 +33,8 @@ class LayoutRenderer:
         self.path_color = (3, 0, 183)
         self.ball_color = (255, 166, 0)
         self.off_path_color = (0, 0, 255)
-        self.path_pos_color = (0, 255, 0)
+        self.path_pos1_color = (0, 255, 0)
+        self.path_posN_color = (177, 255, 177)
 
         # Other fixed dimensions
         self.hole_r = 0.0075          # The radius of a hole (in m)
@@ -172,7 +173,7 @@ class LayoutRenderer:
                            lineType=cv2.LINE_AA,
                            shift=self.shift_bits)
 
-    def get_image(self, ball_pos=None, off_path=False, path_pos=None):
+    def get_image(self, ball_pos=None, off_path=False, rel_path=None):
         """
         Return an image of the board layout, with the optional ball and nearest path point rendered as well
         Args:
@@ -180,8 +181,8 @@ class LayoutRenderer:
                 The position of the ball on the board, in meters from the lower-left corner
             off_path: bool
                 Whether the ball's position is considered off-path
-            path_pos: ndarray of dim (2,)
-                The point on the path that is considered nearest to the ball's current position
+            rel_path: ndarray of dim (p, 2)
+                The next p points along the path toward the goal, relative to the ball's current position
 
         Returns: An ndarray of dim (height, width, 3) with the layout and game elements drawn on it
         """
@@ -192,28 +193,38 @@ class LayoutRenderer:
         if ball_pos is not None:
             ball_pos = ball_pos.copy()    # Be sure not to modify the original
             ball_pos[1] = self.board_height - ball_pos[1]  # Flip Y-axis
-            ball_pos = self._to_pixels(ball_pos)
+            ball_coords = self._to_pixels(ball_pos)
 
             ball_color = self.off_path_color if off_path else self.ball_color
 
-            cv2.circle(frame, center=ball_pos, radius=self._to_pixels(self.ball_r),
+            cv2.circle(frame, center=ball_coords, radius=self._to_pixels(self.ball_r),
                        color=ball_color,
                        thickness=cv2.FILLED,
                        lineType=cv2.LINE_AA,
                        shift=self.shift_bits)
 
-        # Draw the nearest path point
-        if path_pos is not None:
-            path_pos = path_pos.copy()    # Be sure not to modify the original
-            path_pos[1] = self.board_height - path_pos[1]  # Flip Y-axis
-            path_pos = self._to_pixels(path_pos)
+            # Draw the path points toward the goal
+            if rel_path is not None:
+                rel_path = rel_path.copy()    # Be sure not to modify the original
+                rel_path[:, 1] *= -1    # Flip the Y-axis
 
-            path_pos_r = self.ball_r / 2  # We'll draw the marker at half the ball's radius
-            cv2.circle(frame, center=path_pos, radius=self._to_pixels(path_pos_r),
-                       color=self.path_pos_color,
-                       thickness=cv2.FILLED,
-                       lineType=cv2.LINE_AA,
-                       shift=self.shift_bits)
+                # Params for first path marker
+                radius = self.ball_r / 2  # Draw the first marker at half the ball's radius
+                color = self.path_pos1_color
+
+                for i, v in enumerate(rel_path):
+                    path_pt = self._to_pixels(ball_pos + v)   # Positions are relative to the ball
+
+                    if i == 1:
+                        # Params for subsequent path markers
+                        radius = self.ball_r / 4   # Draw the remaining points at 1/4 the ball's radius
+                        color = self.path_posN_color
+
+                    cv2.circle(frame, center=path_pt, radius=self._to_pixels(radius),
+                               color=color,
+                               thickness=cv2.FILLED,
+                               lineType=cv2.LINE_AA,
+                               shift=self.shift_bits)
 
         # Return the rendered frame
         return frame
