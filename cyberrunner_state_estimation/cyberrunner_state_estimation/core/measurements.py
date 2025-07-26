@@ -31,6 +31,7 @@ class Measurements:
         self.plate_pose = PlatePoseEstimator()
 
         # Prepare to localize our camera
+        print("Gathering camera localization data...")
         self.camera_localized = False
         self.camera_localization_data = []
         self.mask = None
@@ -266,6 +267,7 @@ class Measurements:
             self.plate_pose.camera_localization(fix_pts)
 
             # The camera is now localized
+            print("Camera localization complete.")
             self.camera_localized = True
 
     def create_mask(self, frame):

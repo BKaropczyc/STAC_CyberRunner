@@ -277,7 +277,7 @@ class CyberrunnerGym(gym.Env):
                 cv2.imshow("Layout", frame)
                 cv2.waitKey(1)
             else:
-                return frame
+                return frame[...,::-1]  # Convert OpenCV BRG array to RGB array
         elif mode is None:
             return
         else:
