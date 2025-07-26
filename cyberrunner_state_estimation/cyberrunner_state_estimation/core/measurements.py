@@ -30,6 +30,11 @@ class Measurements:
         self.detector_fixed_points = Detector(markers[:4], markers_are_static=True, show_subimage_masks=show_subimage_masks)
         self.plate_pose = PlatePoseEstimator()
 
+        # Prepare to localize our camera
+        self.camera_localized = False
+        self.camera_localization_data = []
+        self.mask = None
+
         # Initialize our measurements
         self.plate_angles = (None, None)    # The inclination angles of the playing surface (alpha, beta)
         self.ball_pos = None                # The 3D position of the ball in the maze frame {m}
@@ -92,14 +97,11 @@ class Measurements:
                 Whether to generate a subimage centered on the ball as well
         """
         # Perform one-time initializations
-        if self.plate_pose.T__W_C is None:
-            # Compute the camera->world transform, T__W_C
-            self.camera_localization(frame)
-
+        if self.mask is None:
             # Create a mask to hide the background, leaving only the playing area
             self.create_mask(frame)
 
-            # Initialize our 3D animations with this transform
+            # Initialize our 3D animations
             if self.anim_3d_top is not None:
                 self.anim_3d_top.init_3d_anim(self.plate_pose.T__W_C)
             if self.anim_3d_side is not None:
@@ -247,24 +249,24 @@ class Measurements:
         # Get the positions of the 4 fixed markers in the image
         fix_pts = self.detector_fixed_points.detect_corners(frame)
 
-        # Make sure all corners were found, otherwise we can't continue
-        corners_found = self.detector_fixed_points.corners_found
-        if not all(corners_found):
-            log_message = f"Camera localization failed: Could not detect all outer corners.\nCorners found: {corners_found}"
-            logger = rcutils_logger.RcutilsLogger(name="Measurements")
-            logger.fatal(log_message)
+        # Make sure all corners were found, otherwise we can't use this frame
+        if all(self.detector_fixed_points.corners_found):
+            self.camera_localization_data.append(fix_pts)
 
-            # Display the frame that we couldn't use for camera localization
-            cv2.imshow("Camera Localization Failure", frame)
-            cv2.waitKey(10 * 1000)
+        # If we have enough localization data (3 seconds @ 60fps)...
+        if len(self.camera_localization_data) >= 180:
+            # Average all the fixed marker positions we collected to get a robust measurement
+            all_data = np.stack(self.camera_localization_data)
+            fix_pts = all_data.mean(axis=0)
 
-            exit(1)
+            # Let the inner corner markers Detector object know where these are as well, so it can hide them as necessary
+            self.detector.fixed_corners = fix_pts
 
-        # Let the inner corner markers Detector object know where these are as well, so it can hide them as necessary
-        self.detector.fixed_corners = fix_pts
+            # Estimate the pose of camera wrt the world frame: T__W_C
+            self.plate_pose.camera_localization(fix_pts)
 
-        # Estimate the pose of camera wrt the world frame: T__W_C
-        self.plate_pose.camera_localization(fix_pts)
+            # The camera is now localized
+            self.camera_localized = True
 
     def create_mask(self, frame):
         """

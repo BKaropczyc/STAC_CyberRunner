@@ -58,6 +58,11 @@ class ImageSubscriber(Node):
         # Convert the ROS Image message back into an OpenCV image
         frame = self.br.imgmsg_to_cv2(data)
 
+        # If we haven't fully localized the camera yet, use this frame for camera localization
+        if not self.estimation_pipeline.measurements.camera_localized:
+            self.estimation_pipeline.measurements.camera_localization(frame)
+            return
+
         # Extract state information from the image
         ball_pos, board_angles, subimg = self.estimation_pipeline.estimate(
             frame, return_ball_subimg=True
