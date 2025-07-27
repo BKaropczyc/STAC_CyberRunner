@@ -177,7 +177,7 @@ class Measurements:
             return np.zeros((64, 64, 3), dtype=np.uint8)
 
         else:
-            # Create a set of (homogeneous) coordinates in a 32mmx32mm square around the ball's location in the maze frame
+            # Create a set of (homogeneous) coordinates in a 64mmx64mm square around the ball's location in the maze frame
             img_size = 64  # Image will be size x size pixels
 
             # Set up the lists of X- and Y-coordinates to include in the image
