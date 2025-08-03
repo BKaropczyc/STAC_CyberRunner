@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <unistd.h>
 #include <string.h>
+#include <cmath>
 
 #include <chrono>
 #include <thread>
@@ -13,6 +14,7 @@
 #include "cyberrunner_dynamixel/error_handling.h"
 #include "cyberrunner_dynamixel/dynamixel_controller.h"
 #include "cyberrunner_interfaces/msg/dynamixel_vel.hpp"
+#include "cyberrunner_interfaces/msg/state_estimate_sub.hpp"
 #include "cyberrunner_interfaces/srv/dynamixel_reset.hpp"
 #include "cyberrunner_interfaces/srv/dynamixel_test.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -29,6 +31,7 @@
 
 // TODO clean this up
 int32_t positions[2];
+double alpha, beta;   // Board angles
 const char* port = "/dev/ttyUSB0";
 
 
@@ -49,40 +52,70 @@ void set_dynamixel_speed(const cyberrunner_interfaces::msg::DynamixelVel::Shared
 }
 
 
-void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::DynamixelReset::Request> request,
+void set_board_angles(const cyberrunner_interfaces::msg::StateEstimateSub::SharedPtr msg)
+{
+    // Store the board angles (in degrees) from the message
+    alpha = msg->state.alpha * (180.0 / M_PI);
+    beta = msg->state.beta * (180.0 / M_PI);
+}
+
+
+void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::DynamixelReset::Request>,
           std::shared_ptr<cyberrunner_interfaces::srv::DynamixelReset::Response> response)
 {
-    int32_t dynamixel_ids[2];
-    int32_t moving_speeds[2];
-
     // Dynamixel ids
+    int32_t dynamixel_ids[2];
     dynamixel_ids[0] = DYNAMIXEL_ID_1;
     dynamixel_ids[1] = DYNAMIXEL_ID_2;
 
-    // Reset motors  TODO: return not 0 if failed
-    dynamixel_init(port, 2, dynamixel_ids, 1000000, 50, (uint32_t*)positions);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Reset params
+    double goal_alpha = -1.0;
+    double goal_beta = 0.0;
+    double tol = 0.2;
+    int reset_speed = 50;
+
+    int32_t last_speed_0 = 0;
+    int32_t last_speed_1 = 0;
 
     // Attempt to reset the playing surface
-    moving_speeds[0] = -150;
-    moving_speeds[1] = 150;
-    dynamixel_step(2, dynamixel_ids, moving_speeds);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    moving_speeds[0] = 0;
-    moving_speeds[1] = 0;
-    dynamixel_step(2, dynamixel_ids, moving_speeds);
-    dynamixel_init(port, 2, dynamixel_ids, 1000000, 50, (uint32_t*)positions);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    moving_speeds[0] = 100;
-    moving_speeds[1] = 0;
-    dynamixel_step(2, dynamixel_ids, moving_speeds);
-    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    double alpha_diff, beta_diff;
+    int32_t speed_0, speed_1;
+    int32_t moving_speeds[2];
+    do {
+        alpha_diff = goal_alpha - alpha;
+        beta_diff = goal_beta - beta;
 
-    // Stop the servos
-    moving_speeds[0] = 0;
-    moving_speeds[1] = 0;
-    dynamixel_step(2, dynamixel_ids, moving_speeds);
-    dynamixel_init(port, 2, dynamixel_ids, 1000000, request->max_temp, (uint32_t*)positions);
+        if (std::abs(alpha_diff) < tol)
+            speed_0 = 0;
+        else if (alpha_diff > 0)
+            speed_0 = -reset_speed;
+        else
+            speed_0 = reset_speed;
+
+        if (std::abs(beta_diff) < tol)
+            speed_1 = 0;
+        else if (beta_diff > 0)
+            speed_1 = -reset_speed;
+        else
+            speed_1 = reset_speed;
+
+        // Send commands to the Dynamixels if necessary
+        if ((speed_0 != last_speed_0) || (speed_1 != last_speed_1))
+        {
+            printf("Angles: alpha=%f, beta=%f\n", alpha, beta);
+            printf("Sending speed_0 = %d, speed_1 = %d\n", speed_0, speed_1);
+
+            moving_speeds[0] = speed_0;
+            moving_speeds[1] = speed_1;
+            dynamixel_step(2, dynamixel_ids, moving_speeds);
+
+            last_speed_0 = speed_0;
+            last_speed_1 = speed_1;
+        }
+
+        // Process incoming state estimation events
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    } while (rclcpp::ok() && ((last_speed_0 != 0) || (last_speed_1 != 0)));
 
     response->success = 1;
 }
@@ -170,7 +203,19 @@ int main(int argc, char** argv)
     rclcpp::Subscription<cyberrunner_interfaces::msg::DynamixelVel>::SharedPtr sub = node->create_subscription<cyberrunner_interfaces::msg::DynamixelVel>("cyberrunner_dynamixel/cmd", 1, &set_dynamixel_speed);
     rclcpp::Service<cyberrunner_interfaces::srv::DynamixelReset>::SharedPtr service = node->create_service<cyberrunner_interfaces::srv::DynamixelReset>("cyberrunner_dynamixel/reset", &reset_dynamixel);
     rclcpp::Service<cyberrunner_interfaces::srv::DynamixelTest>::SharedPtr test_service = node->create_service<cyberrunner_interfaces::srv::DynamixelTest>("cyberrunner_dynamixel/test", &test_dynamixel);
-    rclcpp::spin(node);
+
+    // Subscribe to the state estimation messages in a separate callback group
+    // (so that we can still process them while resetting the board)
+    rclcpp::CallbackGroup::SharedPtr se_callback_group = node->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    rclcpp::SubscriptionOptions sub_options;
+    sub_options.callback_group = se_callback_group;
+    rclcpp::Subscription<cyberrunner_interfaces::msg::StateEstimateSub>::SharedPtr sub2 = node->create_subscription<cyberrunner_interfaces::msg::StateEstimateSub>("cyberrunner_state_estimation/estimate_subimg", 1, &set_board_angles, sub_options);
+
+    // Start spinning the node in a multi-threaded executor
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(node);
+    executor.spin();
+
     rclcpp::shutdown();
     return 0;
 }
