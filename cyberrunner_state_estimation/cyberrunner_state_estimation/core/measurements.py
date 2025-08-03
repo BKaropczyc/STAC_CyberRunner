@@ -161,7 +161,7 @@ class Measurements:
                          shift=shift_bits)
 
             # Display the frame with the path superimposed
-            cv2.imshow(" Maze Path", path_frame)
+            cv2.imshow("Maze Path", path_frame)
             cv2.waitKey(1)
 
     def ball_subimage_from_frame(self, frame):
