@@ -10,7 +10,6 @@
 #include <chrono>
 #include <thread>
 
-
 #include "cyberrunner_dynamixel/error_handling.h"
 #include "cyberrunner_dynamixel/dynamixel_controller.h"
 #include "cyberrunner_interfaces/msg/dynamixel_vel.hpp"
@@ -30,9 +29,11 @@
 
 
 // TODO clean this up
+const char* port = "/dev/ttyUSB0";
+rclcpp::Node::SharedPtr node;
+rclcpp::CallbackGroup::SharedPtr se_callback_group;
 int32_t positions[2];
 double alpha, beta;   // Board angles
-const char* port = "/dev/ttyUSB0";
 
 
 void set_dynamixel_speed(const cyberrunner_interfaces::msg::DynamixelVel::SharedPtr msg)
@@ -74,17 +75,32 @@ void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixe
     double tol = 0.2;
     int reset_speed = 50;
 
+    // Initialize the board angles to NaN to detect when we've started receiving state estimation updates
+    alpha = std::nan("");
+    beta = std::nan("");
+
+    // Subscribe to the state estimation messages in a separate callback group
+    // (so that we can still process them while resetting the board)
+    rclcpp::SubscriptionOptions sub_options;
+    sub_options.callback_group = se_callback_group;
+    rclcpp::Subscription<cyberrunner_interfaces::msg::StateEstimateSub>::SharedPtr se_sub = node->create_subscription<cyberrunner_interfaces::msg::StateEstimateSub>("cyberrunner_state_estimation/estimate_subimg", 1, &set_board_angles, sub_options);
+
+    // Wait for state estimation messages to start being received
+    while (std::isnan(alpha) || std::isnan(beta)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    // Keep track of the latest commands sent to the Dynamixels,
+    // so that we only send commands when the values have changed
     int32_t last_speed_0 = 0;
     int32_t last_speed_1 = 0;
 
     // Attempt to reset the playing surface
-    double alpha_diff, beta_diff;
-    int32_t speed_0, speed_1;
-    int32_t moving_speeds[2];
     do {
-        alpha_diff = goal_alpha - alpha;
-        beta_diff = goal_beta - beta;
+        double alpha_diff = goal_alpha - alpha;
+        double beta_diff = goal_beta - beta;
 
+        int32_t speed_0;
         if (std::abs(alpha_diff) < tol)
             speed_0 = 0;
         else if (alpha_diff > 0)
@@ -92,6 +108,7 @@ void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixe
         else
             speed_0 = reset_speed;
 
+        int32_t speed_1;
         if (std::abs(beta_diff) < tol)
             speed_1 = 0;
         else if (beta_diff > 0)
@@ -105,10 +122,12 @@ void reset_dynamixel(const std::shared_ptr<cyberrunner_interfaces::srv::Dynamixe
             printf("Angles: alpha=%f, beta=%f\n", alpha, beta);
             printf("Sending speed_0 = %d, speed_1 = %d\n", speed_0, speed_1);
 
+            int32_t moving_speeds[2];
             moving_speeds[0] = speed_0;
             moving_speeds[1] = speed_1;
             dynamixel_step(2, dynamixel_ids, moving_speeds);
 
+            // Remember the latest speeds we've sent
             last_speed_0 = speed_0;
             last_speed_1 = speed_1;
         }
@@ -197,21 +216,15 @@ int main(int argc, char** argv)
     dynamixel_ids[1] = DYNAMIXEL_ID_2;
     dynamixel_init(port, 2, dynamixel_ids, 1000000, 256, (uint32_t*)positions);  //TODO make param file
     
-    // Creates an ROS Node
+    // Creates a ROS Node
     rclcpp::NodeOptions options;
-    rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared("cyberrunner_dynamixel", options);
+    node = rclcpp::Node::make_shared("cyberrunner_dynamixel", options);
     rclcpp::Subscription<cyberrunner_interfaces::msg::DynamixelVel>::SharedPtr sub = node->create_subscription<cyberrunner_interfaces::msg::DynamixelVel>("cyberrunner_dynamixel/cmd", 1, &set_dynamixel_speed);
     rclcpp::Service<cyberrunner_interfaces::srv::DynamixelReset>::SharedPtr service = node->create_service<cyberrunner_interfaces::srv::DynamixelReset>("cyberrunner_dynamixel/reset", &reset_dynamixel);
     rclcpp::Service<cyberrunner_interfaces::srv::DynamixelTest>::SharedPtr test_service = node->create_service<cyberrunner_interfaces::srv::DynamixelTest>("cyberrunner_dynamixel/test", &test_dynamixel);
+    se_callback_group = node->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
-    // Subscribe to the state estimation messages in a separate callback group
-    // (so that we can still process them while resetting the board)
-    rclcpp::CallbackGroup::SharedPtr se_callback_group = node->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-    rclcpp::SubscriptionOptions sub_options;
-    sub_options.callback_group = se_callback_group;
-    rclcpp::Subscription<cyberrunner_interfaces::msg::StateEstimateSub>::SharedPtr sub2 = node->create_subscription<cyberrunner_interfaces::msg::StateEstimateSub>("cyberrunner_state_estimation/estimate_subimg", 1, &set_board_angles, sub_options);
-
-    // Start spinning the node in a multi-threaded executor
+    // Start spinning the node in a multi-threaded executor so that we can use multiple callback_groups
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(node);
     executor.spin();
