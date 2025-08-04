@@ -248,7 +248,7 @@ class Measurements:
         Compute the pose of the camera {c} wrt to the world frame {w} : T__W_C.
         """
         # Get the positions of the 4 fixed markers in the image
-        fix_pts = self.detector_fixed_points.detect_corners(frame)
+        fix_pts, _ = self.detector_fixed_points.process_frame(frame)
 
         # Make sure all corners were found, otherwise we can't use this frame
         if all(self.detector_fixed_points.corners_found):

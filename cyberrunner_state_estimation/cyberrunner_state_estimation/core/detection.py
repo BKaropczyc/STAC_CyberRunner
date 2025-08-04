@@ -230,7 +230,8 @@ class Detector:
                 self.draw_object_mask(im, self.markers[i, :])
 
             # Outer (static) markers
-            self.draw_object_mask(im, self.fixed_corners[i, :])
+            if self.fixed_corners is not None:
+                self.draw_object_mask(im, self.fixed_corners[i, :])
 
         # Determine the cropping region in which we should look for the ball
         # If we detected the ball in the previous frame...
