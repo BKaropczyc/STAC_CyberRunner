@@ -156,14 +156,15 @@ class Detector:
 
         # For each corner...
         for i in range(4):
-            # If we detected this corner during the previous frame...
-            if self.corners_found[i]:
-                # ... use that location as the center of the crop
-                sub_img, ul, lr = self.get_cropped(im, self.corners[i, :], Detector.CORNERS_CROP_SIZE_SMALL)
-            else:
-                # Otherwise, use the original 'marker' position as the center of the crop
-                crop_size = Detector.CORNERS_CROP_SIZE_SMALL if self.markers_are_static else Detector.CORNERS_CROP_SIZE_LARGE
-                sub_img, ul, lr = self.get_cropped(im, self.markers[i, :], crop_size)
+            # If we detected a (moving) corner during the previous frame, use the location as the center of the crop
+            # Otherwise, use the original 'marker' position as the center of the crop
+            crop_center = self.corners[i, :] if self.corners_found[i] and not self.markers_are_static else self.markers[i, :]
+
+            # Use a small detection window if we should know where the marker is; otherwise, use a larger window
+            crop_size = Detector.CORNERS_CROP_SIZE_SMALL if self.markers_are_static or self.corners_found[i] else Detector.CORNERS_CROP_SIZE_LARGE
+
+            # Get the cropped corner image
+            sub_img, ul, lr = self.get_cropped(im, crop_center, crop_size)
 
             # Add the results for this corner
             sub_imgs.append(sub_img)
