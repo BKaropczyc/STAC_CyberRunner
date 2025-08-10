@@ -18,7 +18,8 @@ class LayoutRenderer:
         scale: float=1000.0,     # Scale for the visualization. At a scale of 1000, 1mm in maze space = 1 pixel
         *,
         board_width=0.276,      # The width of the board (in meters) provided in layout
-        board_height=0.231      # The height of the board (in meters)
+        board_height=0.231,     # The height of the board (in meters)
+        path=None               # An optional Path object for overlaying the "off-path" regions on the visualization
     ):
         # Store init params as instance vars
         self.layout = layout
@@ -172,6 +173,25 @@ class LayoutRenderer:
                            thickness=cv2.FILLED,
                            lineType=cv2.LINE_AA,
                            shift=self.shift_bits)
+
+        # Overlay the "off-path" regions
+        if path is not None:
+            # Determine which entries in closest_idx represent an "off-path" coordinate
+            # Flip the Y-axis to put the origin the lower-left corner
+            offpath = path.closest_idx[::-1, :] == -1
+
+            # Create a blending mask to overlay the off-path regions on the board
+            blend_mask = offpath.astype(float) * 0.5     # 50% blended overlay
+            blend_mask = np.expand_dims(blend_mask, -1).repeat(3, axis=-1)   # Blend all 3 colors BGR
+            blend_mask = cv2.resize(blend_mask, dsize=(self.image.shape[1], self.image.shape[0]))
+
+            # Create a 'source' image for the off-path regions (a constant color)
+            op_source = np.zeros_like(blend_mask, dtype=np.uint8)
+            op_source[:, :] = self.off_path_color
+
+            # Construct the blended image
+            blend = ((1 - blend_mask) * self.image + blend_mask * op_source).astype(np.uint8)
+            self.image = blend
 
     def get_image(self, ball_pos=None, off_path=False, rel_path=None):
         """

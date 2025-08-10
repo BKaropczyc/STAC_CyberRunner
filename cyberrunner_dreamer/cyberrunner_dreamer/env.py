@@ -57,7 +57,7 @@ class CyberrunnerGym(gym.Env):
                                                         # TODO: Check these measurements!
         shared = get_package_share_directory("cyberrunner_dreamer")
         self.p = LinearPath.load(os.path.join(shared, "path_0002_hard.pkl"))
-        self.renderer = LayoutRenderer(layout, scale=1500)
+        self.renderer = LayoutRenderer(layout, scale=1500)    # Can add path=self.p to render the off-path regions
 
         self.prev_path_pos = 0                  # The most recent position achieved along the path to the goal
         self.num_wait_steps = num_wait_steps    # Number of steps to wait before starting a new episode
