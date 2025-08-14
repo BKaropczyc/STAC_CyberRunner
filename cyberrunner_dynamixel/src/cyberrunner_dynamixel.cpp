@@ -71,7 +71,7 @@ void reset_board(const std::shared_ptr<cyberrunner_interfaces::srv::DynamixelRes
     double goal_alpha = -4.0;
     double goal_beta = -5.0;
     double tol = 0.5;
-    int reset_speed = 40;
+    int reset_speed = 80;
 
     // Initialize the board angles to NaN to detect when we've started receiving state estimation updates
     alpha = std::nan("");
@@ -120,9 +120,6 @@ void reset_board(const std::shared_ptr<cyberrunner_interfaces::srv::DynamixelRes
         // Send commands to the Dynamixels if necessary
         if ((vel_0 != last_vel_0) || (vel_1 != last_vel_1))
         {
-            printf("Angles: alpha=%f, beta=%f\n", alpha, beta);
-            printf("Sending vel_0 = %d, vel_1 = %d\n", vel_0, vel_1);
-
             int32_t velocities[2];
             velocities[0] = vel_0;
             velocities[1] = vel_1;
