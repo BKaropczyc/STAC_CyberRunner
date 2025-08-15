@@ -8,13 +8,13 @@ def main(args=None):
 
     # Define where we should save our logs
     now = datetime.now()
-    date_str = now.strftime("%Y-%m-%d %H:%M:%S")    # Set to a constant to re-use old state
+    date_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    log_dir = "~/cyberrunner_logs/" + date_str      # Set to a constant to re-use old state
 
     # Prepare the parameters for our training loop
     argv = [
         "--configs", "cyberrunner", "large",  # TODO add config file here!
-        "--task", "gym_cyberrunner_dreamer:cyberrunner-ros-v0",
-        "--logdir", "~/cyberrunner_logs/" + date_str,
+        "--logdir", log_dir,
         "--replay_size", "1e6",
         "--run.script", "train",
         "--run.train_ratio", "128",

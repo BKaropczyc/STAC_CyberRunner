@@ -102,7 +102,7 @@ defaults:
   disag_models: 8
 
 cyberrunner:
-  task: gym_cyberrunner_sim:cyberrunner-dreamer-v0
+  task: "gym_cyberrunner_dreamer:cyberrunner-ros-v0"
   envs.amount: 1
   replay: cyberrunner
   jax:

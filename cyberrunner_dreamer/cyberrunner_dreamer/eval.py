@@ -9,17 +9,18 @@ def main(args=None):
     # Define where we should save our logs
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    logdir = "robust_2"
-    checkpoint = f"~/cyberrunner_logs/{logdir}/checkpoint.ckpt"
+    log_dir = "~/cyberrunner_logs/eval_" + date_str
+
+    # Determine which policy (i.e., checkpoint) to evaluate
+    checkpoint = "~/cyberrunner_logs/Training_run_1/checkpoint.ckpt"     # UPDATE as necessary
 
     # Prepare the parameters for our evaluation loop
     argv = [
         "--configs", "cyberrunner", "large",  # TODO add config file here!
-        "--task", "gym_cyberrunner_dreamer:cyberrunner-ros-v0",
-        "--logdir", "~/cyberrunner_logs/eval_" + date_str,
-        "--run.from_checkpoint", checkpoint,
-        "--run.steps", "10000",
+        "--logdir", log_dir,
         "--run.script", "eval_only",
+        "--run.from_checkpoint", checkpoint,
+        "--run.eval_eps", "20",
         "--jax.policy_devices", "0",
         "--jax.train_devices", "0"
     ]

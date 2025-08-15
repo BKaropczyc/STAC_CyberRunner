@@ -56,4 +56,4 @@ def eval_only(agent, env, logger, args):
 
     print("Start evaluation loop.")
     policy = lambda *args: agent.policy(*args, mode="eval")
-    driver(policy, steps=1e10)
+    driver(policy, episodes=args.eval_eps)
