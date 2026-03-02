@@ -20,7 +20,7 @@ def main(args=None):
         "--logdir", log_dir,
         "--run.script", "eval_only",
         "--run.from_checkpoint", checkpoint,
-        "--run.eval_eps", "20",
+        "--run.eval_eps", "50",
         "--jax.policy_devices", "0",
         "--jax.train_devices", "0"
     ]
