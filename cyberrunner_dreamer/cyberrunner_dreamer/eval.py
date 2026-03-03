@@ -11,8 +11,12 @@ def main(args=None):
     date_str = now.strftime("%Y-%m-%d %H:%M:%S")
     log_dir = "~/cyberrunner_logs/eval_" + date_str
 
-    # Determine which policy (i.e., checkpoint) to evaluate
-    checkpoint = "~/cyberrunner_logs/Training_run_1/checkpoint.ckpt"     # UPDATE as necessary
+    # Have the user pick the file which they would like to evaluate
+    checkpoint = askopenfilename(filetypes=[("Checkpoint files", "*.ckpt")],
+                                 initialdir = "~/cyberrunner_logs",
+                                 title="Please select a Checkpoint.ckpt file to evaluate:")
+    if not checkpoint_file:
+        return
 
     # Prepare the parameters for our evaluation loop
     argv = [
