@@ -121,4 +121,7 @@ def train(agent, env, replay, logger, args):
         driver(policy, episodes=1)
         if should_save(episode):
             checkpoint.save()
+        path_250k = Path(logdir / "checkpoint250k.ckpt")
+        if step >= 250_000 and not path_250k.exists():
+            checkpoint.save(path_250k)
     logger.write()
