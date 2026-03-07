@@ -8,6 +8,12 @@ from cyberrunner_interfaces.msg import DynamixelVel
 
 
 def main(args=None):
+    """
+    This script allows you to manually control the Labyrinth board via a standard joystick.
+    This is helpful when debugging various aspects of the system, including state estimation.
+    It uses Pygame to process incoming joystick events, and publishes corresponding velocity messages
+    to the cyberrunner_dynamixel/cmd topic.
+    """
     # Initialize rclpy
     rclpy.init(args=args)
 

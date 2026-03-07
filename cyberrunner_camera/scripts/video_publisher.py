@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+from pathlib import Path
 import threading
 
 import rclpy
@@ -33,6 +34,7 @@ class VideoPublisher(Node):
         if not cap.isOpened():
             print(f"Error: Could not open video file: {video_file}")
             sys.exit(1)
+        self.file_name = Path(video_file).name
 
         # Verify the video meets our requirements
         video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -88,7 +90,7 @@ class VideoPublisher(Node):
 
             # Display the frame
             if display:
-                cv2.imshow("Video", frame)
+                cv2.imshow(self.file_name, frame)
                 cv2.waitKey(1)
 
             # Wait to publish the next frame to maintain our desired rate
