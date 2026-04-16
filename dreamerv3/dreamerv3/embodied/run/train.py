@@ -2,6 +2,7 @@ import re
 
 import embodied
 import numpy as np
+from pathlib import Path
 
 
 def train(agent, env, replay, logger, args):
@@ -121,4 +122,11 @@ def train(agent, env, replay, logger, args):
         driver(policy, episodes=1)
         if should_save(episode):
             checkpoint.save()
+
+        # For consistent comparison of training methods,
+        # take a snapshot of the checkpoint file after the first
+        # episode that surpasses 250,000 steps of training.
+        path_250k = Path(logdir / "checkpoint250K.ckpt")
+        if step >= 250_000 and not path_250k.exists():
+            checkpoint.save(path_250k)
     logger.write()
