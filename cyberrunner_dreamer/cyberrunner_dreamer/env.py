@@ -18,7 +18,7 @@ from typing import Optional
 
 
 class CyberrunnerGym(gym.Env):
-    metadata = {"render_modes": ["human", "single_rgb_array"], "render_fps": 30}
+    metadata = {"render_modes": ["single_rgb_array"], "render_fps": 30}
 
     def __init__(
         self,
