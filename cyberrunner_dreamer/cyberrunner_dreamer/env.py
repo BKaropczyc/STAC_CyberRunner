@@ -57,6 +57,8 @@ class CyberrunnerGym(gym.Env):
                                                         # TODO: Check these measurements!
         shared = get_package_share_directory("cyberrunner_dreamer")
         self.p = LinearPath.load(os.path.join(shared, "path_0002_hard.pkl"))
+        # Uncomment the following line to have the robot play BACKWARDS from the end of the maze to the beginning
+        # self.p.points = self.p.points[::-1]
         self.renderer = LayoutRenderer(layout, scale=1500)    # Can add path=self.p to render the off-path regions
 
         self.prev_path_pos = 0                  # The most recent position achieved along the path to the goal
@@ -159,6 +161,8 @@ class CyberrunnerGym(gym.Env):
 
             # Make sure we get num_wait_steps consecutive frames with the ball in the starting location
             starting_pos = self.p.points[0]
+            # Uncomment the following line to have the robot start playing from the middle of the board
+            # starting_pos = np.array([0.123, 0.087])
             count = 0
             while count < self.num_wait_steps:
                 # Check if the ball is present near the starting location

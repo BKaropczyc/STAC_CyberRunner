@@ -246,6 +246,8 @@ class LinearPath:
 
         p = None
         if idx != -1:
+            # Uncomment the following line to have the robot play BACKWARDS from the end of the maze to the beginning
+            # idx = (self.num_points - 1) - idx
             p = self.points[idx]
 
         return idx, p
