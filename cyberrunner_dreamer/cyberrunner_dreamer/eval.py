@@ -1,6 +1,7 @@
 from datetime import datetime
 import rclpy
 from dreamerv3.train import main as train
+from tkinter.filedialog import askopenfilename
 
 
 def main(args=None):
@@ -15,7 +16,7 @@ def main(args=None):
     checkpoint = askopenfilename(filetypes=[("Checkpoint files", "*.ckpt")],
                                  initialdir = "~/cyberrunner_logs",
                                  title="Please select a Checkpoint.ckpt file to evaluate:")
-    if not checkpoint_file:
+    if not checkpoint:
         return
 
     # Prepare the parameters for our evaluation loop
