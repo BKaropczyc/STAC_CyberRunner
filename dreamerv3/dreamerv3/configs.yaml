@@ -54,7 +54,7 @@ defaults:
     minecraft: {size: [64, 64], break_speed: 100.0}
     dmc: {size: [64, 64], repeat: 2, camera: -1}
     loconav: {size: [64, 64], repeat: 2, camera: -1}
-    # gym: {render_mode: 'human'}
+    # gym: {render_mode: 'human'}     # Uncomment this config option to render the Gym environment in real time
 
   # Agent
   task_behavior: Greedy
