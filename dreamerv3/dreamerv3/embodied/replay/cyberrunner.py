@@ -38,10 +38,10 @@ class Cyberrunner(generic.Generic):
         # Do transformations
         # print(step)
         # print(worker)
-        i = 0
         if load:
-            super().add(orig_step, str(i), load)
+            super().add(orig_step, worker, load)
             return
+        i = 0
         for dir in [0]:
             for flip_h in [0, 1]:
                 for flip_v in [0, 1]:
