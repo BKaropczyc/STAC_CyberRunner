@@ -66,9 +66,14 @@ class Chunk:
     def scan(cls, directory, capacity=None, shorten=0):
         directory = embodied.Path(directory)
         filenames, total = [], 0
+        uuids = set()
         for filename in reversed(sorted(directory.glob("*.npz"))):
             if capacity and total >= capacity:
                 break
+            uuid = filename.stem.split("-")[1]
+            if uuid in uuids:
+                continue    # We've already ready a chuck with this UUID, so skip this file
+            uuids.add(uuid)
             filenames.append(filename)
             total += max(0, int(filename.stem.split("-")[3]) - shorten)
         return sorted(filenames)
