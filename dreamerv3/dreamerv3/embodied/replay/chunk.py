@@ -72,7 +72,7 @@ class Chunk:
                 break
             uuid = filename.stem.split("-")[1]
             if uuid in uuids:
-                continue    # We've already ready a chuck with this UUID, so skip this file
+                continue    # We've already read a chuck with this UUID, so skip this file
             uuids.add(uuid)
             filenames.append(filename)
             total += max(0, int(filename.stem.split("-")[3]) - shorten)

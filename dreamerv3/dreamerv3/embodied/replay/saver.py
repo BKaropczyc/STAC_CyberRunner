@@ -38,26 +38,36 @@ class Saver:
             [x.result() for x in self.promises]
             self.promises.clear()
 
-    def load(self, capacity, length):
+    def load(self, capacity, length, low_memory=False):
         filenames = chunklib.Chunk.scan(self.directory, capacity, length - 1)
         if not filenames:
             return
-        threads = min(len(filenames), 32)
-        with concurrent.futures.ThreadPoolExecutor(threads) as executor:
-            chunks = list(executor.map(chunklib.Chunk.load, filenames))
         streamids = {}
-        for chunk in reversed(sorted(chunks, key=lambda x: x.time)):
-            if chunk.successor not in streamids:
-                streamids[chunk.uuid] = int(embodied.uuid())
+        for filename in reversed(filenames):
+            timestamp, uuid, successor, length = filename.stem.split("-")
+            if successor not in streamids:
+                streamids[uuid] = int(embodied.uuid())
             else:
-                streamids[chunk.uuid] = streamids[chunk.successor]
+                streamids[uuid] = streamids[successor]
         self.loading = True
-        for i, chunk in enumerate(chunks):
-            stream = streamids[chunk.uuid]
-            for index in range(chunk.length):
-                step = {k: v[index] for k, v in chunk.data.items()}
-                yield step, stream
-            # Free memory early to not require twice the replay capacity.
-            chunks[i] = None
-            del chunk
+        if low_memory == True:
+            # Conserve memory by reading in the chucks sequentially
+            for filename in filenames:
+                chunk = chunklib.Chunk.load(filename)
+                stream = streamids[chunk.uuid]
+                for index in range(chunk.length):
+                    step = {k: v[index] for k, v in chunk.data.items()}
+                    yield step, stream
+        else:
+            threads = min(len(filenames), 32)
+            with concurrent.futures.ThreadPoolExecutor(threads) as executor:
+                chunks = list(executor.map(chunklib.Chunk.load, filenames))
+            for i, chunk in enumerate(chunks):
+                stream = streamids[chunk.uuid]
+                for index in range(chunk.length):
+                    step = {k: v[index] for k, v in chunk.data.items()}
+                    yield step, stream
+                # Free memory early to not require twice the replay capacity.
+                chunks[i] = None
+                del chunk
         self.loading = False

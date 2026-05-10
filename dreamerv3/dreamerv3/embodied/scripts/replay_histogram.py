@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 import numpy as np
 from tkinter import Tk
-from tkinter.filedialog import askdirectory
+from tkinter.filedialog import askdirectory, asksaveasfilename
 from dreamerv3.embodied import Config
 from dreamerv3.embodied.replay.saver import Saver
 import matplotlib.pyplot as plt
@@ -47,9 +47,10 @@ def main():
 
     print(f"Reading in the replay buffer...")
     saver = Saver(replay_dir)
+    keys_to_keep = ["is_first", "is_last", "is_terminal", "progress"]  # Which steps keys to keep in memory
 
     # For every step in the replay buffer (in chunk filename order)...
-    for step, stream in saver.load(capacity=None, length=config.batch_length):
+    for step, stream in saver.load(capacity=None, length=config.batch_length, low_memory=True):
         # If this is a new stream ID...
         if stream not in all_streams:
             all_streams.add(stream)
@@ -61,7 +62,8 @@ def main():
 
         # If this step is from an original stream, collect it
         if stream in orig_streams:
-            orig_steps.append(step)
+            small_step = {k: step[k] for k in keys_to_keep}
+            orig_steps.append(small_step)
 
             # If this step is the end of an episode, record the step number
             if step["is_last"]:
@@ -109,7 +111,7 @@ def main():
     title_text = plt.title("")
     plt.xlabel("Progress Along Maze")
     plt.ylabel("% of Replay Buffer Data")
-    plt.ylim((0, 0.5))
+    plt.ylim((0, 0.1))
     plt.gca().xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
     plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
     plt.gca().set_axisbelow(True)
@@ -130,10 +132,29 @@ def main():
 
         return (title_text,) + patches
 
-    # 3. Create and show animation
-    ani = FuncAnimation(plt.gcf(), update_plot, frames=episode_steps, blit=False, interval=100, repeat_delay=1000)
-    plt.show()
+    # 3. Create the animation
+    ani = FuncAnimation(plt.gcf(), update_plot, frames=episode_steps, blit=False, interval=25, repeat=False, repeat_delay=5000)
 
+    # 4. Display or save the animation
+    display_animation = False
+    if display_animation:
+        plt.show()
+
+    else:
+        # Save the animation instead...
+        # Have the user select where to save the video
+        save_path = asksaveasfilename(
+            title="Save animation video as:",
+            initialdir="~/Videos/",
+            defaultextension=".mp4",
+            filetypes=[("Video files", "*.mp4"), ("All files", "*.*")]
+        )
+
+        # If the user didn't cancel...
+        if save_path:
+            print(f"Saving video to: {save_path}...")
+            ani.save(save_path, writer="ffmpeg", fps=30)
+            print("Video saved!")
 
 if __name__ == "__main__":
     main()
