@@ -126,6 +126,7 @@ class CyberrunnerGym(gym.Env):
         """
         Reset the environment to begin a new episode.
         """
+        print("-" * 40)
         print("Resetting the environment...")
         super().reset(seed=seed)
 
@@ -220,7 +221,7 @@ class CyberrunnerGym(gym.Env):
         obs = self._get_obs()
 
         # Compute the progress along the path and the associated reward
-        reward = self._get_reward(obs)
+        reward = self._get_reward(obs, action)
 
         # Determine whether the episode is now over
         done, reason = self._get_done(obs)
@@ -372,7 +373,7 @@ class CyberrunnerGym(gym.Env):
     # Step processing utils
     # ------------------------------------------------------------------------------------------------------------------
 
-    def _get_reward(self, obs):
+    def _get_reward(self, obs, action):
         """Calculate and return the reward for the most recent action-observation step."""
 
         # Get the progress along the path toward the goal

@@ -42,7 +42,6 @@ def train(agent, env, replay, logger, args):
             },
             prefix="episode",
         )
-        print(f"Episode has {length} steps and return {score:.1f}.")
         stats = {}
         for key in args.log_keys_video:
             if key in ep:

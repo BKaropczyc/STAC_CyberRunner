@@ -119,7 +119,7 @@ def make_logger(parsed, logdir, step, config):
     logger = embodied.Logger(
         step,
         [
-            embodied.logger.TerminalOutput(config.filter),
+            # embodied.logger.TerminalOutput(config.filter),
             embodied.logger.JSONLOutput(logdir, "metrics.jsonl"),
             embodied.logger.JSONLOutput(logdir, "scores.jsonl", "episode/score"),
             embodied.logger.TensorBoardOutput(logdir),

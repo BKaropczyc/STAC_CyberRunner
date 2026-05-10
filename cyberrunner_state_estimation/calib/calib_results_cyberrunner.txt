@@ -2,16 +2,16 @@
 
 # Image size used during calibration (in pixels)
 # Width Height
-1920 1080
+1280 720
 
 # Focal lengths
 # f_x f_y
-533.612 532.558
+396.115 395.558
 
 # Principal point
 # c_x c_y
-960 540
+642.914 355.443
 
 # Distortion Coefficients
 # k1 k2 p1 p2 [k3 [k4 k5 k6 [s1 s2 s3 s4]]]
--0.02 -0.0025 0 0 0 0 0 0 0 0 0 0
+0.00570834 -0.02572954  0.00051621 -0.00058502  0.00375223

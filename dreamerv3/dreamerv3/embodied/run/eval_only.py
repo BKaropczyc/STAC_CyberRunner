@@ -26,7 +26,6 @@ def eval_only(agent, env, logger, args):
         length = len(ep["reward"]) - 1
         score = float(ep["reward"].astype(np.float64).sum())
         logger.add({"length": length, "score": score}, prefix="episode")
-        print(f"Episode has {length} steps and return {score:.1f}.")
         stats = {}
         for key in args.log_keys_video:
             if key in ep:
