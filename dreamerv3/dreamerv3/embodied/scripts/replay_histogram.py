@@ -50,7 +50,7 @@ def main():
     keys_to_keep = ["is_first", "is_last", "is_terminal", "progress"]  # Which steps keys to keep in memory
 
     # For every step in the replay buffer (in chunk filename order)...
-    for step, stream in saver.load(capacity=None, length=config.batch_length, low_memory=True):
+    for step, stream in saver.load(capacity=None, length=config.batch_length):
         # If this is a new stream ID...
         if stream not in all_streams:
             all_streams.add(stream)
@@ -135,13 +135,9 @@ def main():
     # 3. Create the animation
     ani = FuncAnimation(plt.gcf(), update_plot, frames=episode_steps, blit=False, interval=25, repeat=False, repeat_delay=5000)
 
-    # 4. Display or save the animation
-    display_animation = False
-    if display_animation:
-        plt.show()
-
-    else:
-        # Save the animation instead...
+    # 4. Save or display the animation
+    save_animation = "save_animation" in sys.argv[1:]
+    if save_animation:
         # Have the user select where to save the video
         save_path = asksaveasfilename(
             title="Save animation video as:",
@@ -155,6 +151,10 @@ def main():
             print(f"Saving video to: {save_path}...")
             ani.save(save_path, writer="ffmpeg", fps=30)
             print("Video saved!")
+
+    else:
+        # Display the animation instead...
+        plt.show()
 
 if __name__ == "__main__":
     main()

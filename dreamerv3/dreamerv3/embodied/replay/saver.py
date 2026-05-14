@@ -38,7 +38,7 @@ class Saver:
             [x.result() for x in self.promises]
             self.promises.clear()
 
-    def load(self, capacity, length, low_memory=False):
+    def load(self, capacity, length):
         filenames = chunklib.Chunk.scan(self.directory, capacity, length - 1)
         if not filenames:
             return
@@ -50,24 +50,11 @@ class Saver:
             else:
                 streamids[uuid] = streamids[successor]
         self.loading = True
-        if low_memory == True:
-            # Conserve memory by reading in the chucks sequentially
-            for filename in filenames:
-                chunk = chunklib.Chunk.load(filename)
+        threads = min(len(filenames), 32)
+        with concurrent.futures.ThreadPoolExecutor(threads) as executor:
+            for chunk in executor.map(chunklib.Chunk.load, filenames):
                 stream = streamids[chunk.uuid]
                 for index in range(chunk.length):
                     step = {k: v[index] for k, v in chunk.data.items()}
                     yield step, stream
-        else:
-            threads = min(len(filenames), 32)
-            with concurrent.futures.ThreadPoolExecutor(threads) as executor:
-                chunks = list(executor.map(chunklib.Chunk.load, filenames))
-            for i, chunk in enumerate(chunks):
-                stream = streamids[chunk.uuid]
-                for index in range(chunk.length):
-                    step = {k: v[index] for k, v in chunk.data.items()}
-                    yield step, stream
-                # Free memory early to not require twice the replay capacity.
-                chunks[i] = None
-                del chunk
         self.loading = False
