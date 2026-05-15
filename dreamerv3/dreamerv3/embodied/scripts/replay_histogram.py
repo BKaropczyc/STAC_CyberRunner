@@ -45,7 +45,7 @@ def main():
     all_streams = set()     # Set of all streams IDs (should be one per data augmentation variation per training restart)
     orig_streams = set()    # The stream ID's that correspond to original, non-augmented training steps
 
-    print(f"Reading in the replay buffer...")
+    print(f"Reading in the replay buffer from: {Path(*replay_dir.parts[-3:])} ...")
     saver = Saver(replay_dir)
     keys_to_keep = ["is_first", "is_last", "is_terminal", "progress"]  # Which steps keys to keep in memory
 
@@ -71,28 +71,22 @@ def main():
 
     print(f"Total number of original (non-augmented) steps in the replay buffer: {len(orig_steps):,}")
     num_episodes = len(episode_steps)
-    print(f"Number of episodes in the replay buffer: {num_episodes:,}")
+    print(f"Number of complete episodes in the replay buffer: {num_episodes:,}")
 
     # Validate the data
     print("Validating replay buffer data...")
     if len(all_streams) %4 != 0:
-        print("ERROR: Number of streams loaded in was not a multiple of 4!", file=sys.stderr)
-        return
+        print("WARNING: Number of streams loaded in was not a multiple of 4!", file=sys.stderr)
     if orig_steps[0]["is_first"] != True:
-        print("ERROR: First original step was not is_first=True", file=sys.stderr)
+        print("WARNING: First original step was not is_first=True", file=sys.stderr)
     if orig_steps[-1]["is_last"] != True:
-        print("ERROR: Last original step was not is_last=True", file=sys.stderr)
+        print("WARNING: Last original step was not is_last=True", file=sys.stderr)
     if orig_steps[-1]["is_terminal"] != True:
-        print("ERROR: Last original step was not is_terminal=True", file=sys.stderr)
+        print("WARNING: Last original step was not is_terminal=True", file=sys.stderr)
     num_starts = sum(1 for step in orig_steps if step["is_first"])
     num_lasts = sum(1 for step in orig_steps if step["is_last"])
     if num_starts != num_lasts:
-        print(f"ERROR: Partial episodes detected! Number of is_first steps ({num_starts:,}) != number of is_last steps ({num_lasts:,})", file=sys.stderr)
-        return
-    if num_starts != num_episodes:
-        print(f"ERROR: Number of is_first steps ({num_starts:,}) != number of episodes ({num_episodes:,})!", file=sys.stderr)
-        return
-    print("Validation succeeded!")
+        print(f"WARNING: Partial episodes detected! Number of is_first steps ({num_starts:,}) != number of is_last steps ({num_lasts:,})", file=sys.stderr)
 
     # Plot the data in the replay buffer
     print("Plotting replay buffer distribution history...")
@@ -133,10 +127,11 @@ def main():
         return (title_text,) + patches
 
     # 3. Create the animation
-    ani = FuncAnimation(plt.gcf(), update_plot, frames=episode_steps, blit=False, interval=25, repeat=False, repeat_delay=5000)
+    save_animation = "save_animation" in sys.argv[1:]     # Should we save or display the animation?
+    repeat_animation = not save_animation    # Only repeat the animation if we're displaying it
+    ani = FuncAnimation(plt.gcf(), update_plot, frames=episode_steps, blit=False, interval=25, repeat=repeat_animation, repeat_delay=5000)
 
     # 4. Save or display the animation
-    save_animation = "save_animation" in sys.argv[1:]
     if save_animation:
         # Have the user select where to save the video
         save_path = asksaveasfilename(
