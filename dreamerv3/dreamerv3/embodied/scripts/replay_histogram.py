@@ -1,4 +1,6 @@
 import sys
+from collections import deque
+from itertools import pairwise
 from pathlib import Path
 import numpy as np
 from tkinter import Tk
@@ -8,6 +10,89 @@ from dreamerv3.embodied.replay.saver import Saver
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter, StrMethodFormatter
 from matplotlib.animation import FuncAnimation
+
+class HistogramQueue:
+    """A class for efficiently maintaining histogram data for a collection of values
+    as new data is added to the collection. Rather than re-calculating the entire
+    histogram after new data is added, the counts for the new added are added to existing counts."""
+    def __init__(self, range, bins, maxlen=None):
+        self.range = range     # The lower and upper range of the histogram bins
+        self.bins = bins       # The number of bins in the histogram
+        self.maxlen = maxlen   # Only the most recent maxlen data items will be used for the histogram values
+                               # This allows you to determine the distribution of just "recent" data
+
+        self.bin_edges = np.histogram_bin_edges([], bins=bins, range=range)
+        self._counts = np.zeros(bins, dtype=int)
+        self._data = deque(maxlen=maxlen)   # A FIFO queue of only "recent" data (defined by maxlen)
+
+
+    def add(self, new_data):
+        """Add new data to the queue.
+        After maxlen values have been added, old data is discarded and is not included in the histogram results."""
+        if self.maxlen and len(new_data) >= self.maxlen:
+            # data will completely replace our queue
+            if len(new_data) > self.maxlen:
+                # Trim data to the latest maxlen elements
+                new_data = new_data[-self.maxlen:]
+            self._data = deque(new_data, maxlen=self.maxlen)
+            self._counts, _ = np.histogram(new_data, bins=self.bin_edges)
+
+        else:
+            # At least some of the existing data will remain
+            num_overflow = len(self._data) + len(new_data) - self.maxlen if self.maxlen else 0
+            if num_overflow > 0:
+                # We will overflow our maxlen by adding this data
+                # Remove the data that will overflow
+                removed_items = [self._data.popleft() for _ in range(num_overflow)]
+                remove_counts, _ = np.histogram(removed_items, bins=self.bin_edges)
+                self._counts -= remove_counts
+
+            # We can add this data without overflowing
+            self._data.extend(new_data)
+            data_counts, _ = np.histogram(new_data, bins=self.bin_edges)
+            self._counts += data_counts
+
+
+    def counts(self, as_proportion:bool=False):
+        """Return the current histogram counts, optionally as a proportion of all the (recent) data."""
+        if as_proportion:
+            return (self._counts / np.sum(self._counts)).copy()
+        else:
+            return self._counts.copy()
+
+
+class HistogramHistory(HistogramQueue):
+    """
+    A subclass of HistogramQueue for recording how the histogram of a dataset has changed over time as new data is added.
+    This subclass can be used to recall the updated histogram data after each call to .add()
+    """
+    def __init__(self, range, bins, maxlen=None, initial_size=100):
+        super().__init__(range, bins, maxlen)
+        # initial_size is a hint for how large to make the history array (i.e., the expected number of calls to .add())
+        # If more calls to .add() are made, the history array will be dynamically resized as necessary
+        self._counts_history = np.zeros((initial_size, bins), dtype=int)    # The histogram history
+        self._length = 0     # The number of calls to .add() that have been made
+
+    def __len__(self):
+        return self._length
+
+    def __iter__(self):
+        """Iterating over a HistogramHistory yields the histogram counts after each call to .add() was made."""
+        for i in range(self._length):
+            yield self._counts_history[i]
+
+
+    def add(self, new_data):
+        """Add new data to the queue."""
+        super().add(new_data)
+
+        # Resize our history array if necessary
+        if self._length == self._counts_history.shape[0]:
+            self._counts_history.resize((self._length * 2, self.bins))   # Double the size
+
+        # Record the new histogram counts
+        self._counts_history[self._length, :] = self._counts.copy()
+        self._length += 1
 
 
 def main():
@@ -97,10 +182,16 @@ def main():
     # Also, the "progress" value of the terminal steps is often very high due to "cheating" that ended the episode
     # We're trying to visualize what parts of the maze DreamerV3 is learning from
     vals = [np.nan if s["is_terminal"] else s["progress"].item() for s in orig_steps]
-    num_bins = 100
+
+    # Gather the data for plotting
+    replay_history = HistogramHistory(range=(1, 9860), bins=100, maxlen=assumed_replay_size, initial_size=num_episodes)
+    # For each episode...
+    for start_step, end_step in pairwise([0] + episode_steps):
+        # Add the data from this episode and record the new histogram
+        replay_history.add(vals[start_step:end_step])
 
     # 1. Set up the initial plot
-    n, bins, patches = plt.hist([], bins=num_bins, range=(0, 9860), color="tab:red")
+    _, _, patches = plt.hist([], bins=replay_history.bin_edges, color="tab:red")
     plt.suptitle("Distribution of \"progress\" Values in the Replay Buffer", fontsize=14)
     title_text = plt.title("")
     plt.xlabel("Progress Along Maze")
@@ -112,24 +203,25 @@ def main():
     plt.grid(axis='y', alpha=0.3)
 
     # 2. Update function
-    def update_plot(step_num):
-        # Get the data for this frame
-        data = vals[max(0, step_num - assumed_replay_size) : step_num]   # The replay buffer will have at most capacity / 4 original steps in it
-        num_vals = np.count_nonzero(~np.isnan(data))
-        # Compute new histogram values
-        new_n, _ = np.histogram(data, bins=bins, weights=np.ones(len(data)) / num_vals)
-        # Update rectangle heights
-        for rect, h in zip(patches, new_n):
+    def update_plot(info):
+        # Get the data for this episode
+        episode_num, step_num, counts = info
+
+        # Update the rectangle heights
+        new_h = counts / counts.sum()    # Express the height as a proportion of all data
+        for rect, h in zip(patches, new_h):
             rect.set_height(h)
+
         # Update the title
-        title_text.set_text(f"(after {step_num:,} steps)")
+        title_text.set_text(f"(after {episode_num:,} episodes  / {step_num:,} steps)")
 
         return (title_text,) + patches
 
     # 3. Create the animation
     save_animation = "save_animation" in sys.argv[1:]     # Should we save or display the animation?
     repeat_animation = not save_animation    # Only repeat the animation if we're displaying it
-    ani = FuncAnimation(plt.gcf(), update_plot, frames=episode_steps, blit=False, interval=25, repeat=repeat_animation, repeat_delay=5000)
+    plot_info = zip(range(1, num_episodes + 1), episode_steps, replay_history)
+    ani = FuncAnimation(plt.gcf(), update_plot, frames=plot_info, blit=False, interval=25, repeat=repeat_animation, repeat_delay=5000)
 
     # 4. Save or display the animation
     if save_animation:
