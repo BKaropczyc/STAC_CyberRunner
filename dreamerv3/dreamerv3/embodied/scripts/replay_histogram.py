@@ -1,8 +1,9 @@
 import sys
 from collections import deque
-from itertools import pairwise
+from itertools import pairwise, chain
 from pathlib import Path
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 from tkinter import Tk
 from tkinter.filedialog import askdirectory, asksaveasfilename
 from dreamerv3.embodied import Config
@@ -173,55 +174,106 @@ def main():
     if num_starts != num_lasts:
         print(f"WARNING: Partial episodes detected! Number of is_first steps ({num_starts:,}) != number of is_last steps ({num_lasts:,})", file=sys.stderr)
 
-    # Plot the data in the replay buffer
-    print("Plotting replay buffer distribution history...")
+    # Gather the data for plotting
+    print("Calculating distribution histories...")
     assumed_replay_size = int(config.replay_size / 4)   # Only 1/4 of the replay buffer was used for original (non-augmented) data
-    print(f" (assuming a replay capacity of {assumed_replay_size:,} non-augmented steps)")
+    print(f" (assuming a replay buffer capacity of {assumed_replay_size:,} non-augmented steps)")
 
     # NOTE: We don't plot the "terminal" steps in an episode since we never "learn" from them (they have no associated action)
     # Also, the "progress" value of the terminal steps is often very high due to "cheating" that ended the episode
     # We're trying to visualize what parts of the maze DreamerV3 is learning from
-    vals = [np.nan if s["is_terminal"] else s["progress"].item() for s in orig_steps]
+    progress_vals = [np.nan if s["is_terminal"] else s["progress"].item() for s in orig_steps]
 
-    # Gather the data for plotting
-    replay_history = HistogramHistory(range=(1, 9860), bins=100, maxlen=assumed_replay_size, initial_size=num_episodes)
+    hist_range = (1, 9860)    # Range of "progress" values for CyberRunner
+    num_bins = 100            # Number of bins in the histograms
+    sampling = "uniform"      # or "priority"
+    replay_history = HistogramHistory(range=hist_range, bins=num_bins, maxlen=assumed_replay_size, initial_size=num_episodes)
+    training_history = HistogramHistory(range=hist_range, bins=num_bins, maxlen=1_000_000, initial_size=num_episodes)    # maxlen defines what is "recent" for the training data
+    rng = np.random.default_rng(seed=0)
+    seq_len = config.batch_length
+    training_ratio = config.run.train_ratio / (config.batch_size * config.batch_length)
+
     # For each episode...
     for start_step, end_step in pairwise([0] + episode_steps):
-        # Add the data from this episode and record the new histogram
-        replay_history.add(vals[start_step:end_step])
+        # Add the data from this episode to our replay buffer history and record the new histogram
+        replay_history.add(progress_vals[start_step:end_step])
 
-    # 1. Set up the initial plot
-    _, _, patches = plt.hist([], bins=replay_history.bin_edges, color="tab:red")
-    plt.suptitle("Distribution of \"progress\" Values in the Replay Buffer", fontsize=14)
-    title_text = plt.title("")
-    plt.xlabel("Progress Along Maze")
-    plt.ylabel("% of Replay Buffer Data")
-    plt.ylim((0, 0.1))
-    plt.gca().xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
-    plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
-    plt.gca().set_axisbelow(True)
-    plt.grid(axis='y', alpha=0.3)
+        # Sample some training data from the replay buffer
+        replay_contents = np.array(replay_history._data)
+        ep_len = end_step - start_step
+        num_samples = int(ep_len * training_ratio)
+
+        match sampling:
+            case "uniform":
+                # Uniform sampling
+                seq_idx = rng.integers(len(replay_contents) - seq_len + 1, size=num_samples)
+
+            case "priority":
+                # Prioritized sampling
+                window = sliding_window_view(replay_contents, window_shape=seq_len)
+                seq_maxes = np.nanmax(window, axis=1)
+                probs = (0.4 + seq_maxes / np.nanmax(replay_contents)) ** 0.8
+                seq_idx = rng.choice(len(probs), size=num_samples, p=probs / probs.sum())
+
+            case _:
+                # Unsupported sampling type
+                raise ValueError(f"Sampling type '{sampling}' is not supported")
+
+        # Add all the sampled steps to the training_history and record the new histogram
+        sampled_sequences = [replay_contents[idx:idx + seq_len] for idx in seq_idx]
+        training_history.add(list(chain.from_iterable(sampled_sequences)))
+
+    # Animate the distribution histories
+    print("Plotting the distribution histories...")
+
+    # 1. Set up the initial plots
+    fig, axs = plt.subplots(1, 2, figsize=(14, 7), sharex=True, sharey=True)
+    replay_hist, training_hist = axs
+    title_text = plt.suptitle("", fontsize=14)
+
+    # Distribution of data in the replay buffer
+    _, _, rb_patches = replay_hist.hist([], bins=replay_history.bin_edges, color="tab:red")
+    replay_hist.set_title("Replay Buffer")
+    replay_hist.set_xlabel("Progress Along Maze")
+    replay_hist.set_ylabel("% of Replay Buffer Data")
+    replay_hist.set_ylim((0, 0.1))
+    replay_hist.xaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}'))
+    replay_hist.yaxis.set_major_formatter(PercentFormatter(1))
+    replay_hist.set_axisbelow(True)
+    replay_hist.grid(axis='y', alpha=0.3)
+
+    # Distribution of training data
+    _, _, td_patches = training_hist.hist([], bins=training_history.bin_edges, color="tab:blue")
+    training_hist.set_title("Training Data")
+    training_hist.set_xlabel("Progress Along Maze")
+    training_hist.set_ylabel("% of Training Data")
+    training_hist.set_axisbelow(True)
+    training_hist.grid(axis='y', alpha=0.3)
 
     # 2. Update function
     def update_plot(info):
         # Get the data for this episode
-        episode_num, step_num, counts = info
+        episode_num, step_num, rb_counts, td_counts = info
 
         # Update the rectangle heights
-        new_h = counts / counts.sum()    # Express the height as a proportion of all data
-        for rect, h in zip(patches, new_h):
+        new_h = rb_counts / rb_counts.sum()    # Express the height as a proportion of all data
+        for rect, h in zip(rb_patches, new_h):
+            rect.set_height(h)
+
+        new_h = td_counts / td_counts.sum()    # Express the height as a proportion of all data
+        for rect, h in zip(td_patches, new_h):
             rect.set_height(h)
 
         # Update the title
-        title_text.set_text(f"(after {episode_num:,} episodes  / {step_num:,} steps)")
+        title_text.set_text(f"Distributions after {episode_num:,} episodes  / {step_num:,} steps")
 
-        return (title_text,) + patches
+        return (title_text,) + rb_patches + td_patches
 
     # 3. Create the animation
     save_animation = "save_animation" in sys.argv[1:]     # Should we save or display the animation?
     repeat_animation = not save_animation    # Only repeat the animation if we're displaying it
-    plot_info = zip(range(1, num_episodes + 1), episode_steps, replay_history)
-    ani = FuncAnimation(plt.gcf(), update_plot, frames=plot_info, blit=False, interval=25, repeat=repeat_animation, repeat_delay=5000)
+    plot_info = zip(range(1, num_episodes + 1), episode_steps, replay_history, training_history)
+    ani = FuncAnimation(plt.gcf(), update_plot, frames=plot_info, blit=False, interval=0, repeat=repeat_animation, repeat_delay=5000)
 
     # 4. Save or display the animation
     if save_animation:
