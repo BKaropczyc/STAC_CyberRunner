@@ -163,11 +163,11 @@ def main():
     print("Validating replay buffer data...")
     if len(all_streams) %4 != 0:
         print("WARNING: Number of streams loaded in was not a multiple of 4!", file=sys.stderr)
-    if orig_steps[0]["is_first"] != True:
+    if not orig_steps[0]["is_first"]:
         print("WARNING: First original step was not is_first=True", file=sys.stderr)
-    if orig_steps[-1]["is_last"] != True:
+    if not orig_steps[-1]["is_last"]:
         print("WARNING: Last original step was not is_last=True", file=sys.stderr)
-    if orig_steps[-1]["is_terminal"] != True:
+    if not orig_steps[-1]["is_terminal"]:
         print("WARNING: Last original step was not is_terminal=True", file=sys.stderr)
     num_starts = sum(1 for step in orig_steps if step["is_first"])
     num_lasts = sum(1 for step in orig_steps if step["is_last"])
@@ -227,7 +227,7 @@ def main():
     print("Plotting the distribution histories...")
 
     # 1. Set up the initial plots
-    fig, axs = plt.subplots(1, 2, figsize=(14, 7), sharex=True, sharey=True)
+    fig, axs = plt.subplots(1, 2, figsize=(14, 7), sharex='all', sharey='all')
     replay_hist, training_hist = axs
     title_text = plt.suptitle("", fontsize=14)
 
@@ -273,7 +273,7 @@ def main():
     save_animation = "save_animation" in sys.argv[1:]     # Should we save or display the animation?
     repeat_animation = not save_animation    # Only repeat the animation if we're displaying it
     plot_info = zip(range(1, num_episodes + 1), episode_steps, replay_history, training_history)
-    ani = FuncAnimation(plt.gcf(), update_plot, frames=plot_info, blit=False, interval=0, repeat=repeat_animation, repeat_delay=5000)
+    ani = FuncAnimation(fig, update_plot, frames=plot_info, interval=0, repeat=repeat_animation, repeat_delay=5000)
 
     # 4. Save or display the animation
     if save_animation:
