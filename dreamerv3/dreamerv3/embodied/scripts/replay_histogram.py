@@ -13,19 +13,29 @@ from matplotlib.ticker import PercentFormatter, StrMethodFormatter
 from matplotlib.animation import FuncAnimation
 
 class HistogramQueue:
-    """A class for efficiently maintaining histogram data for a collection of values
-    as new data is added to the collection. Rather than re-calculating the entire
-    histogram after new data is added, the counts for the new added are added to existing counts."""
-    def __init__(self, range, bins, maxlen=None):
+    """
+    A class for efficiently maintaining histogram information for a collection of values
+    as new values are added to the collection. Rather than re-calculating the entire
+    histogram after new values are added, the counts for the new values are added to existing counts.
+
+    There are two separate ways to have the histogram information reflect only the most "recent" data:
+      1. Define a value for maxlen, which defines an upper limit on how much (recent) data is used to calculate the histogram values
+      2. Define a value for decay, which defines the proportion of the previous counts that are maintained before new counts are added
+    Only one of theese two options may be used at a time. maxlen is best for fixed-sized queues in which old is completely discarded.
+    decay is best when the influence of old values decreases over time.
+    """
+    def __init__(self, range, bins, maxlen=None, decay=None):
         self.range = range     # The lower and upper range of the histogram bins
         self.bins = bins       # The number of bins in the histogram
         self.maxlen = maxlen   # Only the most recent maxlen data items will be used for the histogram values
-                               # This allows you to determine the distribution of just "recent" data
+        self.decay = decay     # Previous histogram counts will be multiplied by this value before new counts are added
+
+        # Make sure that maxlen and decay are used exclusively
+        assert not (maxlen and decay), "You cannot use both maxlen and decay at the same time."
 
         self.bin_edges = np.histogram_bin_edges([], bins=bins, range=range)
-        self._counts = np.zeros(bins, dtype=int)
+        self._counts = np.zeros(bins, dtype="float" if decay else "int")
         self._data = deque(maxlen=maxlen)   # A FIFO queue of only "recent" data (defined by maxlen)
-
 
     def add(self, new_data):
         """Add new data to the queue.
@@ -48,11 +58,12 @@ class HistogramQueue:
                 remove_counts, _ = np.histogram(removed_items, bins=self.bin_edges)
                 self._counts -= remove_counts
 
-            # We can add this data without overflowing
+            # We can now add this data without overflowing
             self._data.extend(new_data)
             data_counts, _ = np.histogram(new_data, bins=self.bin_edges)
+            if self.decay:
+                self._counts *= self.decay
             self._counts += data_counts
-
 
     def counts(self, as_proportion:bool=False):
         """Return the current histogram counts, optionally as a proportion of all the (recent) data."""
@@ -67,11 +78,11 @@ class HistogramHistory(HistogramQueue):
     A subclass of HistogramQueue for recording how the histogram of a dataset has changed over time as new data is added.
     This subclass can be used to recall the updated histogram data after each call to .add()
     """
-    def __init__(self, range, bins, maxlen=None, initial_size=100):
-        super().__init__(range, bins, maxlen)
+    def __init__(self, range, bins, maxlen=None, decay=None, initial_size=100):
+        super().__init__(range, bins, maxlen, decay)
         # initial_size is a hint for how large to make the history array (i.e., the expected number of calls to .add())
         # If more calls to .add() are made, the history array will be dynamically resized as necessary
-        self._counts_history = np.zeros((initial_size, bins), dtype=int)    # The histogram history
+        self._counts_history = np.zeros(shape=(initial_size, bins), dtype=self._counts.dtype)    # The histogram history
         self._length = 0     # The number of calls to .add() that have been made
 
     def __len__(self):
@@ -81,7 +92,6 @@ class HistogramHistory(HistogramQueue):
         """Iterating over a HistogramHistory yields the histogram counts after each call to .add() was made."""
         for i in range(self._length):
             yield self._counts_history[i]
-
 
     def add(self, new_data):
         """Add new data to the queue."""
