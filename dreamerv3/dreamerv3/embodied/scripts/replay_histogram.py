@@ -196,9 +196,9 @@ def main():
 
     hist_range = (1, 9860)    # Range of "progress" values for CyberRunner
     num_bins = 100            # Number of bins in the histograms
-    sampling = "uniform"      # or "priority"
+    sampling = "uniform"      # or "priority" or "selective"
     replay_history = HistogramHistory(range=hist_range, bins=num_bins, maxlen=assumed_replay_size, initial_size=num_episodes)
-    training_history = HistogramHistory(range=hist_range, bins=num_bins, maxlen=1_000_000, initial_size=num_episodes)    # maxlen defines what is "recent" for the training data
+    training_history = HistogramHistory(range=hist_range, bins=num_bins, decay=0.99, initial_size=num_episodes)
     rng = np.random.default_rng(seed=0)
     seq_len = config.batch_length
     training_ratio = config.run.train_ratio / (config.batch_size * config.batch_length)
@@ -224,6 +224,39 @@ def main():
                 seq_maxes = np.nanmax(window, axis=1)
                 probs = (0.4 + seq_maxes / np.nanmax(replay_contents)) ** 0.8
                 seq_idx = rng.choice(len(probs), size=num_samples, p=probs / probs.sum())
+
+            case "selective":
+                # Selective sampling
+                if len(training_history) == 0:
+                    # No training data yet. Sample uniformly.
+                    seq_idx = rng.integers(len(replay_contents) - seq_len + 1, size=num_samples)
+                else:
+                    # Bias the sampling to attempt to "even out" the amount of training data along the entire maze path
+
+                    # 1. Assign each sequence of experience data to a segment along the maze path
+                    # The segments will correspond to the "bins" of the histogram
+                    window = sliding_window_view(replay_contents, window_shape=seq_len)
+                    seq_progress = np.nanmean(window, axis=1)
+                    seq_bins = np.digitize(seq_progress, bins=training_history.bin_edges[:-1]) - 1    # digitize() returns len(bins) for values above the last entry in bins
+
+                    # 2. Collect the set of experience data sequences per "bin"
+                    bins_with_data = np.unique(seq_bins)
+                    indices_dict = {bin: np.where(seq_bins == bin)[0] for bin in bins_with_data}   # There are faster (but uglier) ways to do this with argsort and split
+
+                    # 3. For each bin we have experience data for, decide what proportion of the existing training data came from that bin
+                    bin_counts = training_history.counts()[bins_with_data]
+                    bin_proportions = bin_counts / bin_counts.sum()
+
+                    # 4. Invert these proportions, so that bins with little existing training data get higher values,
+                    # and bins with lots of existing training data get lower values.
+                    inverse_proportions = bin_proportions.max() + 0.1 - bin_proportions   # The 0.1 "smooths" the values a little, so that even the bin with the most training data has a >0 probability of being sampled
+
+                    # 5. Select bins to sample from according to these weights.
+                    # Bins with lots of training data have a lower probability of being selected and vice versa.
+                    bin_selections = rng.choice(bins_with_data, size=num_samples, p=inverse_proportions / inverse_proportions.sum())
+
+                    # 6. Randomly choose an experience sequence from each selected bin
+                    seq_idx = [rng.choice(indices_dict[bin]) for bin in bin_selections]
 
             case _:
                 # Unsupported sampling type
