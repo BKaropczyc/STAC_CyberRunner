@@ -31,10 +31,10 @@ class HistogramQueue:
         self.decay = decay     # Previous histogram counts will be multiplied by this value before new counts are added
 
         # Make sure that maxlen and decay are used exclusively
-        assert not (maxlen and decay), "You cannot use both maxlen and decay at the same time."
+        assert maxlen is None or decay is None, "You cannot use both maxlen and decay at the same time."
 
         self.bin_edges = np.histogram_bin_edges([], bins=bins, range=range)
-        self._counts = np.zeros(bins, dtype="float" if decay else "int")
+        self._counts = np.zeros(bins, dtype="float" if decay is not None else "int")
         self._data = deque(maxlen=maxlen)   # A FIFO queue of only "recent" data (defined by maxlen)
 
     def add(self, new_data):
@@ -61,7 +61,7 @@ class HistogramQueue:
             # We can now add this data without overflowing
             self._data.extend(new_data)
             data_counts, _ = np.histogram(new_data, bins=self.bin_edges)
-            if self.decay:
+            if self.decay is not None:
                 self._counts *= self.decay
             self._counts += data_counts
 
