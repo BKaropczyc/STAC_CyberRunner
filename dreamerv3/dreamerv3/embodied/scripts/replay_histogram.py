@@ -250,9 +250,12 @@ def main():
                     # 4. Invert these proportions, so that bins with little existing training data get higher values,
                     # and bins with lots of existing training data get lower values.
                     inverse_proportions = bin_proportions.max() + 0.1 - bin_proportions   # The 0.1 "smooths" the values a little, so that even the bin with the most training data has a >0 probability of being sampled
+                                                                                          # Small values (as low as 0.0) encourage the sampling to resemble the inverse training data distribution
+                                                                                          # Larger values yield a more uniform sampling from among the bins that contain experience data
 
                     # 5. Select bins to sample from according to these weights.
                     # Bins with lots of training data have a lower probability of being selected and vice versa.
+                    # Sampling bins rather than experience sequences isolates the sample from the biased distribution of the replay buffer
                     bin_selections = rng.choice(bins_with_data, size=num_samples, p=inverse_proportions / inverse_proportions.sum())
 
                     # 6. Randomly choose an experience sequence from each selected bin
@@ -316,7 +319,7 @@ def main():
     save_animation = "save_animation" in sys.argv[1:]     # Should we save or display the animation?
     repeat_animation = not save_animation    # Only repeat the animation if we're displaying it
     plot_info = zip(range(1, num_episodes + 1), episode_steps, replay_history, training_history)
-    ani = FuncAnimation(fig, update_plot, frames=plot_info, interval=0, repeat=repeat_animation, repeat_delay=5000)
+    ani = FuncAnimation(fig, update_plot, frames=plot_info, save_count=num_episodes, interval=0, repeat=repeat_animation, repeat_delay=5000)
 
     # 4. Save or display the animation
     if save_animation:
