@@ -1,5 +1,4 @@
 import sys
-from collections import deque
 from itertools import pairwise, chain
 from pathlib import Path
 import numpy as np
@@ -7,103 +6,11 @@ from numpy.lib.stride_tricks import sliding_window_view
 from tkinter import Tk
 from tkinter.filedialog import askdirectory, asksaveasfilename
 from dreamerv3.embodied import Config
+from dreamerv3.embodied.core.histogram import FixedLenHistogramStream, DecayingHistogramStream, HistogramStreamHistory
 from dreamerv3.embodied.replay.saver import Saver
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter, StrMethodFormatter
 from matplotlib.animation import FuncAnimation
-
-class HistogramQueue:
-    """
-    A class for efficiently maintaining histogram information for a collection of values
-    as new values are added to the collection. Rather than re-calculating the entire
-    histogram after new values are added, the counts for the new values are added to existing counts.
-
-    There are two separate ways to have the histogram information reflect only the most "recent" data:
-      1. Define a value for maxlen, which defines an upper limit on how much (recent) data is used to calculate the histogram values
-      2. Define a value for decay, which defines the proportion of the previous counts that are maintained before new counts are added
-    Only one of theese two options may be used at a time. maxlen is best for fixed-sized queues in which old is completely discarded.
-    decay is best when the influence of old values decreases over time.
-    """
-    def __init__(self, range, bins, maxlen=None, decay=None):
-        self.range = range     # The lower and upper range of the histogram bins
-        self.bins = bins       # The number of bins in the histogram
-        self.maxlen = maxlen   # Only the most recent maxlen data items will be used for the histogram values
-        self.decay = decay     # Previous histogram counts will be multiplied by this value before new counts are added
-
-        # Make sure that maxlen and decay are used exclusively
-        assert maxlen is None or decay is None, "You cannot use both maxlen and decay at the same time."
-
-        self.bin_edges = np.histogram_bin_edges([], bins=bins, range=range)
-        self._counts = np.zeros(bins, dtype="float" if decay is not None else "int")
-        self._data = deque(maxlen=maxlen)   # A FIFO queue of only "recent" data (defined by maxlen)
-
-    def add(self, new_data):
-        """Add new data to the queue.
-        After maxlen values have been added, old data is discarded and is not included in the histogram results."""
-        if self.maxlen and len(new_data) >= self.maxlen:
-            # data will completely replace our queue
-            if len(new_data) > self.maxlen:
-                # Trim data to the latest maxlen elements
-                new_data = new_data[-self.maxlen:]
-            self._data = deque(new_data, maxlen=self.maxlen)
-            self._counts, _ = np.histogram(new_data, bins=self.bin_edges)
-
-        else:
-            # At least some of the existing data will remain
-            num_overflow = len(self._data) + len(new_data) - self.maxlen if self.maxlen else 0
-            if num_overflow > 0:
-                # We will overflow our maxlen by adding this data
-                # Remove the data that will overflow
-                removed_items = [self._data.popleft() for _ in range(num_overflow)]
-                remove_counts, _ = np.histogram(removed_items, bins=self.bin_edges)
-                self._counts -= remove_counts
-
-            # We can now add this data without overflowing
-            self._data.extend(new_data)
-            data_counts, _ = np.histogram(new_data, bins=self.bin_edges)
-            if self.decay is not None:
-                self._counts *= self.decay
-            self._counts += data_counts
-
-    def counts(self, as_proportion:bool=False):
-        """Return the current histogram counts, optionally as a proportion of all the (recent) data."""
-        if as_proportion:
-            return (self._counts / np.sum(self._counts)).copy()
-        else:
-            return self._counts.copy()
-
-
-class HistogramHistory(HistogramQueue):
-    """
-    A subclass of HistogramQueue for recording how the histogram of a dataset has changed over time as new data is added.
-    This subclass can be used to recall the updated histogram data after each call to .add()
-    """
-    def __init__(self, range, bins, maxlen=None, decay=None, initial_size=100):
-        super().__init__(range, bins, maxlen, decay)
-        # initial_size is a hint for how large to make the history array (i.e., the expected number of calls to .add())
-        # If more calls to .add() are made, the history array will be dynamically resized as necessary
-        self._counts_history = np.zeros(shape=(initial_size, bins), dtype=self._counts.dtype)    # The histogram history
-        self._length = 0     # The number of calls to .add() that have been made
-
-    def __len__(self):
-        return self._length
-
-    def __iter__(self):
-        """Iterating over a HistogramHistory yields the histogram counts after each call to .add() was made."""
-        for i in range(self._length):
-            yield self._counts_history[i]
-
-    def add(self, new_data):
-        """Add new data to the queue."""
-        super().add(new_data)
-
-        # Resize our history array if necessary
-        if self._length == self._counts_history.shape[0]:
-            self._counts_history.resize((self._length * 2, self.bins))   # Double the size
-
-        # Record the new histogram counts
-        self._counts_history[self._length, :] = self._counts.copy()
-        self._length += 1
 
 
 def main():
@@ -197,8 +104,10 @@ def main():
     hist_range = (1, 9860)    # Range of "progress" values for CyberRunner
     num_bins = 100            # Number of bins in the histograms
     sampling = "uniform"      # or "priority" or "selective"
-    replay_history = HistogramHistory(range=hist_range, bins=num_bins, maxlen=assumed_replay_size, initial_size=num_episodes)
-    training_history = HistogramHistory(range=hist_range, bins=num_bins, decay=0.99, initial_size=num_episodes)
+    replay_stream = FixedLenHistogramStream(bins=num_bins, range=hist_range, maxlen=assumed_replay_size)
+    replay_history = HistogramStreamHistory(replay_stream, initial_size=num_episodes)
+    training_stream = DecayingHistogramStream(bins=num_bins, range=hist_range, decay_batch=1000, decay_rate=0.99)
+    training_history = HistogramStreamHistory(training_stream, initial_size=num_episodes)
     rng = np.random.default_rng(seed=0)
     seq_len = config.batch_length
     training_ratio = config.run.train_ratio / (config.batch_size * config.batch_length)
@@ -209,7 +118,7 @@ def main():
         replay_history.add(progress_vals[start_step:end_step])
 
         # Sample some training data from the replay buffer
-        replay_contents = np.array(replay_history._data)
+        replay_contents = np.array(replay_stream._data)
         ep_len = end_step - start_step
         num_samples = int(ep_len * training_ratio)
 
@@ -237,14 +146,14 @@ def main():
                     # The segments will correspond to the "bins" of the histogram
                     window = sliding_window_view(replay_contents, window_shape=seq_len)
                     seq_progress = np.nanmean(window, axis=1)
-                    seq_bins = np.digitize(seq_progress, bins=training_history.bin_edges[:-1]) - 1    # digitize() returns len(bins) for values above the last entry in bins
+                    seq_bins = np.digitize(seq_progress, bins=training_stream.bin_edges[:-1]) - 1    # digitize() returns len(bins) for values above the last entry in bins
 
                     # 2. Collect the set of experience data sequences per "bin"
                     bins_with_data = np.unique(seq_bins)
                     indices_dict = {bin: np.where(seq_bins == bin)[0] for bin in bins_with_data}   # There are faster (but uglier) ways to do this with argsort and split
 
                     # 3. For each bin we have experience data for, decide what proportion of the existing training data came from that bin
-                    bin_counts = training_history.counts()[bins_with_data]
+                    bin_counts = training_stream.counts()[bins_with_data]
                     bin_proportions = bin_counts / bin_counts.sum()
 
                     # 4. Invert these proportions, so that bins with little existing training data get higher values,
@@ -278,7 +187,7 @@ def main():
     title_text = plt.suptitle("", fontsize=14)
 
     # Distribution of data in the replay buffer
-    _, _, rb_patches = replay_hist.hist([], bins=replay_history.bin_edges, color="tab:red")
+    _, _, rb_patches = replay_hist.hist([], bins=replay_stream.bin_edges, color="tab:red")
     replay_hist.set_title("Replay Buffer")
     replay_hist.set_xlabel("Progress Along Maze")
     replay_hist.set_ylabel("% of Replay Buffer Data")
@@ -289,7 +198,7 @@ def main():
     replay_hist.grid(axis='y', alpha=0.3)
 
     # Distribution of training data
-    _, _, td_patches = training_hist.hist([], bins=training_history.bin_edges, color="tab:blue")
+    _, _, td_patches = training_hist.hist([], bins=training_stream.bin_edges, color="tab:blue")
     training_hist.set_title("Training Data")
     training_hist.set_xlabel("Progress Along Maze")
     training_hist.set_ylabel("% of Training Data")
