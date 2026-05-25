@@ -82,7 +82,15 @@ def train(agent, env, replay, logger, args):
     episode = embodied.Counter()
 
     def train_step(ep, worker):
-        for _ in range(should_train(step)):
+        num_batches = should_train(step)
+
+        # NOTE: We should make sure the selector does not pre-sample more items than necessary
+        # Otherwise, it could pre-sample items that might be deleted by the next time we train (next episode)
+        if hasattr(replay.sampler, "set_max_prefetch"):
+            total_samples = num_batches * agent.batch_size
+            replay.sampler.set_max_prefetch(total_samples)
+
+        for _ in range(num_batches):
             with timer.scope("dataset"):
                 batch[0] = next(dataset)
             outs, state[0], mets = agent.train(batch[0], state[0])
@@ -90,6 +98,8 @@ def train(agent, env, replay, logger, args):
             if "priority" in outs:
                 replay.prioritize(outs["key"], outs["priority"])
             updates.increment()
+        if len(replay.sampler.sampled_keys) != 0:
+            print("WARNING: UniformTraining sampler still had pre-sampled keys at the end of a training episode.")
         agent.sync()
         agg = metrics.result()
         report = agent.report(batch[0])

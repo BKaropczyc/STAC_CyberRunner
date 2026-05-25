@@ -9,7 +9,7 @@ def main(args=None):
     # Define where we should save our logs
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    log_dir = "~/cyberrunner_logs/" + date_str      # Set to a constant to re-use old state
+    log_dir = "~/cyberrunner_logs/SelectiveSampling"      # Set to a constant to re-use old state
 
     # Prepare the parameters for our training loop
     argv = [
