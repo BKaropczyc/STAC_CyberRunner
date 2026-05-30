@@ -1,9 +1,9 @@
 cloudpickle
 crafter
-gym==0.25.2
+gymnasium
 jax
 jaxlib
-numpy
+numpy < 2.0
 optax
 rich
 ruamel.yaml<0.18.0

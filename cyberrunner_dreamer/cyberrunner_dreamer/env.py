@@ -8,7 +8,7 @@ from cyberrunner_interfaces.srv import DynamixelReset
 import rclpy
 from rclpy.node import Node
 from cv_bridge import CvBridge
-import gym
+import gymnasium as gym
 import numpy as np
 import time
 import cv2
@@ -18,7 +18,7 @@ from typing import Optional
 
 
 class CyberrunnerGym(gym.Env):
-    metadata = {"render_modes": ["single_rgb_array"], "render_fps": 30}
+    metadata = {"render_modes": ["human", "rgb_array"]}
 
     def __init__(
         self,
@@ -59,7 +59,8 @@ class CyberrunnerGym(gym.Env):
         self.p = LinearPath.load(os.path.join(shared, "path_0002_hard.pkl"))
         # Uncomment the following line to have the robot play BACKWARDS from the end of the maze to the beginning
         # self.p.points = self.p.points[::-1]
-        self.renderer = LayoutRenderer(layout, scale=1500)    # Can add path=self.p to render the off-path regions
+        if render_mode is not None:
+            self.renderer = LayoutRenderer(layout, scale=1500)    # Can add path=self.p to render the off-path regions
 
         self.prev_path_pos = 0                  # The most recent position achieved along the path to the goal
         self.num_wait_steps = num_wait_steps    # Number of steps to wait before starting a new episode
@@ -122,7 +123,7 @@ class CyberrunnerGym(gym.Env):
     # Gym environment primary methods
     # ------------------------------------------------------------------------------------------------------------------
 
-    def reset(self, *, seed=None, return_info=False, options=None):
+    def reset(self, *, seed=None, options=None):
         """
         Reset the environment to begin a new episode.
         """
@@ -197,11 +198,12 @@ class CyberrunnerGym(gym.Env):
         self.recent_steps = 0
         self.start_time = time.time()
 
-        if return_info:
-            info_dict = {}   # Currently unused
-            return obs, info_dict
-        else:
-            return obs
+        # Render the environment state
+        if self.render_mode == "human":
+            self.render()
+
+        info_dict = {}   # Currently unused
+        return obs, info_dict
 
     def step(self, action):
         """Take an action in the environment and return the observation and reward."""
@@ -224,7 +226,8 @@ class CyberrunnerGym(gym.Env):
         reward = self._get_reward(obs, action)
 
         # Determine whether the episode is now over
-        done, reason = self._get_done(obs)
+        terminated, truncated, reason = self._get_done(obs)
+        done = terminated or truncated
         if done:
             # Stop the servos
             self._send_action(np.zeros(2))
@@ -246,15 +249,16 @@ class CyberrunnerGym(gym.Env):
             print(f"  Total accumulated reward: {self.accum_reward:0.4f}")
 
         # Define our "info" dictionary
-        if self.success:
-            info = {"is_terminal": False}
-        else:
-            info = {}
+        info = {}    # Currently unused
 
         # Finalize the observation
         self._normalize_obs(obs)
         obs["progress"] = np.asarray([1 + self.prev_path_pos], dtype=np.float32)
         obs["log_reward"] = np.asarray([reward if not done else 0], dtype=np.float32)
+
+        # Render the environment state
+        if self.render_mode == "human":
+            self.render()
 
         # Output a warning if we are stepping too slowly
         now = time.time()
@@ -269,13 +273,11 @@ class CyberrunnerGym(gym.Env):
             self.start_time = now
 
         # Return the step results
-        return obs, reward, done, info
+        return obs, reward, terminated, truncated, info
 
-    def render(self, mode="human"):
-        # NOTE: Keyword arg mode is deprecated and will be removed in later versions.
-
+    def render(self):
         mode = self.render_mode
-        if mode == "single_rgb_array" or mode == "human":
+        if mode == "rgb_array" or mode == "human":
             # Determine the current call position
             ball_pos = None
             if self.ball_detected:
@@ -290,14 +292,14 @@ class CyberrunnerGym(gym.Env):
             frame = self.renderer.get_image(ball_pos, self.off_path, rel_path)
 
             if mode == "human":
-                cv2.imshow("Layout", frame)
+                cv2.imshow("CyberRunner Layout", frame)
                 cv2.waitKey(1)
             else:
                 return frame[...,::-1]  # Convert OpenCV BRG array to RGB array
         elif mode is None:
             return
         else:
-            super().render(mode=mode)  # Raise an exception
+            super().render()  # Raise an exception
 
     # ------------------------------------------------------------------------------------------------------------------
     # Private utility methods
@@ -429,36 +431,37 @@ class CyberrunnerGym(gym.Env):
             obs: The most recent environment observation
 
         Returns:
-            done: bool, True if the episode has finished.
-
-            reason: str, The reason the episode has finished if done is True
+            terminated: bool, True if the environment has reached a terminal state
+            truncated: bool, True if the episode is being cut short before a terminal state is reached
+            reason: str, The reason the episode has finished
         """
         # Prepare to return our response
         reason = None
+        is_terminal = True   # By default, any reason we detect is a terminal state
 
-        # Done if ball is not detected
+        # Ball is not detected
         if not self.ball_detected:
             reason = "BALL NOT DETECTED"
 
-        # Done if we reached the goal
+        # We reached the goal
         elif self.p.num_points - self.prev_path_pos <= 1:
             reason = "SUCCESS!!!"
             self.success = True
 
-        # Done if off path and not cheating
+        # Off path and not cheating
         elif (not self.cheat) and self.off_path:
             reason = "OFF PATH"
 
-        # Done if we made too much progress in a single step
+        # We made too much progress in a single step
         elif (not self.cheat) and (self.progress > 300):
             reason = "TOO MUCH PROGRESS (cheated)"
 
-        # Done if we've taken too many steps
+        # We've taken too many steps
         elif self.steps >= 3000:
             reason = "MAX STEPS REACHED"
-
-        # We are 'done' if we defined a reason
-        done = bool(reason)
+            is_terminal = False
 
         # Return our results
-        return done, reason
+        terminated = bool(reason) and is_terminal
+        truncated = bool(reason) and not is_terminal
+        return terminated, truncated, reason

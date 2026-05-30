@@ -1,7 +1,7 @@
 import sys
 from datetime import datetime
 import rclpy
-import gym
+import gymnasium as gym
 import numpy as np
 from datetime import datetime
 

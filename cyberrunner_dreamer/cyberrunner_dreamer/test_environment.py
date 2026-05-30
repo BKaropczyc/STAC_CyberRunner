@@ -1,32 +1,25 @@
-import gym
+import gymnasium as gym
 import cyberrunner_dreamer    # To register the environment with Gym
-
-# Ignore Gym API deprecation warnings
-# We know we're using an older version of Gym
-from warnings import filterwarnings
-filterwarnings(action='ignore', category=DeprecationWarning, message=".* old step API which returns one bool instead of two.*")
-filterwarnings(action='ignore', category=UserWarning, message=".* You are trying to use 'human' rendering .*")
 
 def main():
     # Initialize our environment
     env = gym.make("cyberrunner_dreamer:cyberrunner-ros-v0",
                    render_mode="human",
-                   new_step_api=False,
                    send_actions=False)
     env.action_space.seed(42)
 
     # Start a basic environment-interaction loop
     while True:
         print("Starting a new episode...")
-        obs, info = env.reset(return_info=True)
+        obs, info = env.reset()
 
         # Play one episode
         while True:
             # Take a random action
             act = env.action_space.sample()
-            obs, reward, done, info = env.step(act)
+            obs, reward, terminated, truncated, info = env.step(act)
 
-            if done:
+            if terminated or truncated:
                 break   # End of this episode
 
     env.close()
