@@ -39,7 +39,7 @@ class CyberrunnerGym(gym.Env):
         # Observation space
         # i.e., what the agent "sees" from the environment at each time step
         self.observation_space = gym.spaces.Dict(
-            image=gym.spaces.Box(0, 255, (64, 64, 3), np.uint8),  # The maze image around the ball
+            image=gym.spaces.Box(0, 255, (64, 64, 1), np.uint8),  # The maze image around the ball
             states=gym.spaces.Box(-np.inf, np.inf, (4,), np.float32),   # alpha, beta, xb, yb
             goal=gym.spaces.Box(-np.inf, np.inf, (num_rel_path * 2,), np.float32),  # Direction to the goal along the path
             progress=gym.spaces.Box(-np.inf, np.inf, (1,), np.float32),  # Progress along the path
@@ -59,6 +59,8 @@ class CyberrunnerGym(gym.Env):
         self.p = LinearPath.load(os.path.join(shared, "path_0002_hard.pkl"))
         # Uncomment the following line to have the robot play BACKWARDS from the end of the maze to the beginning
         # self.p.points = self.p.points[::-1]
+        self.cheat_threshold = int(0.057 / self.p.distance)
+
         if render_mode is not None:
             self.renderer = LayoutRenderer(layout, scale=1500)    # Can add path=self.p to render the off-path regions
 
@@ -358,7 +360,7 @@ class CyberrunnerGym(gym.Env):
             rel_path = self.p.get_rel_path(states[2:], self.num_rel_path, 60).flatten()
 
             # Ball subimage
-            img = self.br.imgmsg_to_cv2(msg.subimg)
+            img = self.br.imgmsg_to_cv2(msg.subimg).mean(axis=-1, keepdims=True)
 
             # Store this as our current observation
             self.obs = {"states": states, "goal": rel_path, "image": img}
@@ -453,7 +455,7 @@ class CyberrunnerGym(gym.Env):
             reason = "OFF PATH"
 
         # We made too much progress in a single step
-        elif (not self.cheat) and (self.progress > 300):
+        elif (not self.cheat) and (self.progress > self.cheat_threshold):
             reason = "TOO MUCH PROGRESS (cheated)"
 
         # We've taken too many steps
