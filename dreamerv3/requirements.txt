@@ -1,11 +1,11 @@
 cloudpickle
 crafter
 gymnasium
-jax
+jax[cuda12]<0.7.0      # Or just 'jax' without a CUDA GPU; version limited by compatibility with tensorflow_probability
 jaxlib
-numpy < 2.0
+numpy<2.0              # ROS Jazzy is not fully compatible with NumPy 2.x
 optax
 rich
 ruamel.yaml<0.18.0
-tensorflow-cpu
+tensorflow-cpu<2.20    # TensorFlow 2.20 and 2.21 introduce a crashing instability
 tensorflow_probability

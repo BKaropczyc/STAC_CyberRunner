@@ -104,8 +104,11 @@ pip install --upgrade pip
 ```
 
 ```
-pip install --upgrade "jax[cuda12]"       # If you have a CUDA GPU installed
-pip install --upgrade jax                 # If you only have a CPU (e.g., on a virtual machine)
+pip install -e src/STAC_CyberRunner/dreamerv3
+```
+
+```
+pip install pygame
 ```
 
 > **Optional**: You can check whether JAX can access your GPU with:
@@ -115,13 +118,6 @@ pip install --upgrade jax                 # If you only have a CPU (e.g., on a v
 > jax.devices()   # Should return a CUDA device if GPU is available
 > exit()
 > ```
-
-```
-pip install -e src/STAC_CyberRunner/dreamerv3
-```
-```
-pip install pygame
-```
 
 ## Install ROS dependencies
 ```
