@@ -360,7 +360,7 @@ class CyberrunnerGym(gym.Env):
             rel_path = self.p.get_rel_path(states[2:], self.num_rel_path, 60).flatten()
 
             # Ball subimage
-            img = self.br.imgmsg_to_cv2(msg.subimg).mean(axis=-1, keepdims=True)
+            img = self.br.imgmsg_to_cv2(msg.subimg).mean(axis=-1, keepdims=True).astype(np.uint8)
 
             # Store this as our current observation
             self.obs = {"states": states, "goal": rel_path, "image": img}
