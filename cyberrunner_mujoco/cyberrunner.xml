@@ -1,0 +1,104 @@
+<!-- A MuJoCo model of the CyberRunner Labyrinth-playing robot. Authored by: Brett Karopczyc -->
+<mujoco model="cyberrunner">
+    <asset>
+        <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+
+        <material name="frame" rgba=".8235 0.706 0.549 1"/>
+        <material name="wall" rgba="0.285 0.151 0.00 1.0"/>
+        <material name="ball" rgba="0.169 0.597 0.950 1"/>
+
+        <texture name="board_face" type="2d" file="assets/labyrinth.png"/>
+        <material name="board" texture="board_face"/>
+
+        <texture name="outer_markers" type="cube" fileup="assets/outer_markers_up.png" filedown="assets/outer_markers_down.png" rgb1=".8235 0.706 0.549"/>
+        <material name="outer_markers" texture="outer_markers" texuniform="true"/>
+
+        <texture name="inner_markers" type="cube" filefront="assets/inner_markers_front.png" rgb1=".8235 0.706 0.549"/>
+        <material name="inner_markers" texture="inner_markers"/>
+    </asset>
+
+    <default>
+        <!-- Update density for CGS units (g/cm^3) -->
+        <geom density="1" />
+
+        <!-- Named classes -->
+        <default class="frame">
+            <geom material="frame" density="0.68"/>   <!-- Density of indoor beech wood is about 0.68 g/cm^3 -->
+        </default>
+        <default class="walls">
+            <geom material="wall" density="1.04"/>  <!-- Approximate density of ABS plastic. Not sure what type of plastic the walls are made from. -->
+        </default>
+    </default>
+
+    <option gravity="0 0 -980.665" timestep="0.0005" integrator="implicitfast"/>   <!-- Gravity units are cm/s^2 -->
+
+    <visual>
+        <headlight ambient="0.3 0.3 0.3" diffuse="0.3 0.3 0.3" specular="0.3 0.3 0.3"/>
+        <quality shadowsize="16384"/>
+    </visual>
+
+    <worldbody>
+        <light diffuse="0.5 0.5 0.5" specular="0.3 0.3 0.3" pos="16.2 13.5 200" dir="0 0 -1"/>
+        <geom type="plane" pos="0 0 -9.3" size="0 0 0.1" rgba="1 1 1 1"/>
+
+        <camera name="intrinsic_cam" resolution="1280 720" sensorsize=".576 .360" focalpixel="396.115 395.558" principalpixel="2.914 -4.557" pos="16.6 14.3 25" zaxis="0 0 1"/>
+        <camera name="fov_camera" resolution="1280 720" fovy="75" pos="16.6 14.3 25" zaxis="0 0 1"/>
+
+        <body name="outer_frame" childclass="frame">
+            <!-- Outer Frame -->
+            <geom type="box" pos="16.6 0.4 -4.65" size="16.6 0.4 4.65"/>
+            <geom type="box" pos="16.6 28.2 -4.65" size="16.6 0.4 4.65"/>
+            <geom type="box" pos="0.4 14.3 -4.65" size="0.4 13.5 4.65" material="outer_markers"/>
+            <geom type="box" pos="32.8 14.3 -4.65" size="0.4 13.5 4.65" material="outer_markers"/>
+            <geom type="box" pos="16.6 14.3 -8.5" size="15.8 13.5 0.1"/>
+
+            <!-- Knobs -->
+            <geom type="cylinder" size="1.6" fromto="15.6 0 -4.4 15.6 -1.7 -4.4" class="walls"/>
+            <geom type="cylinder" size="1.6" fromto="33.2 13.7 -5.0 35.2 13.7 -5.0" class="walls"/>
+
+            <body name="middle_frame" childclass="frame" pos="1 1 -0.2">
+                <joint name="y_rot" type="hinge" axis="0 1 0" pos="15.6 0 -1.0" range="-8 8" limited="true" solimplimit="0.995 0.999 0.1 0.5 1"/>
+
+                <!-- Middle Frame -->
+                <geom type="box" pos="15.6 0.4 -1.0" size="15.6 0.4 1.0"/>
+                <geom type="box" pos="15.6 26.2 -1.0" size="15.6 0.4 1.0"/>
+                <geom type="box" pos="0.4 13.3 -1.0" size="0.4 12.5 1.0"/>
+                <geom type="box" pos="30.8 13.3 -1.0" size="0.4 12.5 1.0"/>
+
+                <body name="inner_frame" childclass="frame" pos="1.05 1 -0.1">
+                    <joint name="x_rot" type="hinge" axis="1 0 0" pos="0 12.3 -1.0" range="-8 8" limited="true" solimplimit="0.995 0.999 0.1 0.5 1"/>
+
+                    <!-- Inner Frame -->
+                    <geom type="box" pos="14.55 0.4 -1.0" size="13.75 0.4 1.0"/>
+                    <geom type="box" pos="14.55 24.2 -1.0" size="13.75 0.4 1.0"/>
+                    <geom type="box" pos="0.4 12.3 -1.0" size="0.4 11.5 1.0"/>
+                    <geom type="box" pos="28.7 12.3 -1.0" size="0.4 11.5 1.0"/>
+                    <geom type="box" pos="0.4 0.4 -1.0" size="0.4 0.4 1.0" material="inner_markers"/>
+                    <geom type="box" pos="28.7 0.4 -1.0" size="0.4 0.4 1.0" material="inner_markers"/>
+                    <geom type="box" pos="0.4 24.2 -1.0" size="0.4 0.4 1.0" material="inner_markers"/>
+                    <geom type="box" pos="28.7 24.2 -1.0" size="0.4 0.4 1.0" material="inner_markers"/>
+
+                    <!-- Labyrinth Board -->
+                    <body name="board" pos="0.8 0.8 -2.0">
+                        <geom type="box" pos="13.8 11.55 -0.1" size="13.8 11.55 0.1" material="board"/>
+                        <body name="walls" childclass="walls">
+                            <include file="cyberrunner_walls.xml"/>
+                        </body>
+                    </body>
+                </body>
+            </body>
+        </body>
+
+        <body name="ball" pos="18 24.5 2.0">
+            <freejoint name="ball_joint"/>
+            <!-- A GraviTrax marble has a radius of 6.35mm (0.25 inches) and weighs about 8.5g -->
+            <!-- The calculated density below is in grams/cm^3 -->
+            <geom type="sphere" size="0.635" material="ball" density="7.925" solimp="0.99 0.99 0.01" solref="0.001 1"/>
+        </body>
+    </worldbody>
+
+    <actuator>
+        <velocity name="tilt_y" joint="x_rot" gear="1500" ctrllimited="true" ctrlrange="-4000 4000" kv="55"/>
+        <velocity name="tilt_x" joint="y_rot" gear="1500" ctrllimited="true" ctrlrange="-4000 4000" kv="55"/>
+    </actuator>
+</mujoco>
