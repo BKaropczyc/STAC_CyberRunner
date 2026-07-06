@@ -3,27 +3,29 @@
     <asset>
         <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
 
-        <material name="frame" rgba=".8235 0.706 0.549 1"/>
+        <material name="frame" class="frame" rgba=".8235 0.706 0.549 1"/>
         <material name="wall" rgba="0.285 0.151 0.00 1.0"/>
         <material name="ball" rgba="0.169 0.597 0.950 1"/>
 
-        <texture name="board_face" type="2d" file="assets/labyrinth.png"/>
-        <material name="board" texture="board_face"/>
-
         <texture name="outer_markers" type="cube" fileup="assets/outer_markers_up.png" filedown="assets/outer_markers_down.png" rgb1=".8235 0.706 0.549"/>
-        <material name="outer_markers" texture="outer_markers" texuniform="true"/>
+        <material name="outer_markers" class="frame" texture="outer_markers" texuniform="true"/>
 
         <texture name="inner_markers" type="cube" filefront="assets/inner_markers_front.png" rgb1=".8235 0.706 0.549"/>
-        <material name="inner_markers" texture="inner_markers"/>
+        <material name="inner_markers" class="frame" texture="inner_markers"/>
+
+        <mesh name="board_mesh" file="assets/board_mesh.obj" scale="0.1 0.1 0.1" inertia="exact"/>
+        <texture name="board_face" type="2d" file="assets/labyrinth.png"/>
+        <material name="board" class="frame" texture="board_face"/>
     </asset>
 
     <default>
         <!-- Update density for CGS units (g/cm^3) -->
-        <geom density="1" />
+        <geom density="1"/>
 
         <!-- Named classes -->
         <default class="frame">
             <geom material="frame" density="0.68"/>   <!-- Density of indoor beech wood is about 0.68 g/cm^3 -->
+            <material specular="0.2"/>
         </default>
         <default class="walls">
             <geom material="wall" density="1.04"/>  <!-- Approximate density of ABS plastic. Not sure what type of plastic the walls are made from. -->
@@ -50,7 +52,7 @@
             <geom type="box" pos="16.6 28.2 -4.65" size="16.6 0.4 4.65"/>
             <geom type="box" pos="0.4 14.3 -4.65" size="0.4 13.5 4.65" material="outer_markers"/>
             <geom type="box" pos="32.8 14.3 -4.65" size="0.4 13.5 4.65" material="outer_markers"/>
-            <geom type="box" pos="16.6 14.3 -8.5" size="15.8 13.5 0.1"/>
+            <geom type="box" pos="16.6 14.3 -8.5" size="15.8 13.5 0.1" rgba="0.1 0.1 0.1 1"/>
 
             <!-- Knobs -->
             <geom type="cylinder" size="1.6" fromto="15.6 0 -4.4 15.6 -1.7 -4.4" class="walls"/>
@@ -80,7 +82,7 @@
 
                     <!-- Labyrinth Board -->
                     <body name="board" pos="0.8 0.8 -2.0">
-                        <geom type="box" pos="13.8 11.55 -0.1" size="13.8 11.55 0.1" material="board"/>
+                        <geom type="mesh" mesh="board_mesh" material="board"/>
                         <body name="walls" childclass="walls">
                             <include file="cyberrunner_walls.xml"/>
                         </body>

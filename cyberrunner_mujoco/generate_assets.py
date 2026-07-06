@@ -75,22 +75,27 @@ walls_xml = f"""<mujoco model="cyberrunner_walls">
 Path("cyberrunner_walls.xml").write_text(walls_xml)
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Board texture
+# Board texture image
 # Supersample the image by 100 (in mm)
 img = Image.new("RGB", (276 * 100, 231 * 100), color=(210, 180, 140))
 draw = ImageDraw.Draw(img)
 
 # Draws the holes
-hole_radius = 7  # (mm)
-for x, y in cyberrunner_hard_layout["holes"]:
-    # Convert to millimeters * 100
-    x *= 1000 * 100
-    y *= 1000 * 100
+# NOTE: You may want to draw the holes on the labyrinth.png file to line up the mesh geometry with the texture map image
+# using Blender. Once the UV mapping is created and the new .obj file is exported from Blender, you should then recreate
+# the labyrinth.png file WITHOUT the holes drawn so that the mesh geometry alone defines the hole locations.
+draw_holes = False   # Set to True if re-mapping the UV coordinates in Blender
+if draw_holes:
+    hole_radius = 7  # (mm)
+    for x, y in cyberrunner_hard_layout["holes"]:
+        # Convert to millimeters * 100
+        x *= 1000 * 100
+        y *= 1000 * 100
 
-    # Flip the y-axis
-    y = 23100 - y
+        # Flip the y-axis
+        y = 23100 - y
 
-    draw.circle((x, y), hole_radius * 100, fill="black")
+        draw.circle((x, y), hole_radius * 100, fill="black")
 
 # Collect the maze waypoints
 points = []

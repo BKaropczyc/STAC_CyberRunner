@@ -1,0 +1,88 @@
+This file documents the steps necessary to create the assets/board_mesh.obj file
+
+Overview: The mesh geometry was created in FreeCAD, and the maze image was added as a texture to the mesh using Blender.
+
+To recreate the board_mesh.obj (and board_mesh.mtl) files, do the following:
+
+1. Export the board mesh geometry as a .obj file (without any texture map)
+
+	Open the Labyrinth Board Mesh.FCStd file in FreeCAD
+	In the Model structure hierarchy on the left, select the final "Labyrinth Board" object 
+		The entire board with the holes should highlight
+	Select File -> Export to export the selected object
+		Select "Alias Mesh (*.obj)" as the file type when exporting
+		It doesn't matter where you save this file, but you will need to import it into Blender in the next step
+
+
+2. Add a texture map to the mesh .obj file using Blender
+
+	Open Blender and create a new Blender document
+		File menu -> New -> General
+	Delete the initial "Cube" object that gets created
+		Right hand-side, "Scene Collection"
+		Right-click "Cube" and select "Delete"
+	Hide the Camera and Light object (optional)
+		In the Scene Collection, click the eyeball for objects to hide
+	Import the board mesh
+		File menu -> Import -> Wavefront (.obj)
+		Select the .obj file that was exported from FreeCAD
+		Leave the Scale and options on the right at their defaults
+		Click Import Wavefront OBJ in the lower right corner
+	Add a new material for the image texture
+		On the right-hand side, in the vertical list of icons, select the "Material" icon at the bottom
+		Click "+" to create a new Material
+			Optional: Name it Labyrinth Board
+		Under the Surface settings of the Material, click the small yellow dot next to Base Color
+			Under the Texture column, select "Image Texture"
+			Click "Open" and open up the labyrinth.png image to apply to the board face
+	Select all of the faces on the "top" of the board mesh
+		Enter "Edit Mode"
+			Hit Tab or select "Edit Mode" in the upper-right drop down, currently "Object Mode"
+		Enter "Face" Select Mode
+			At the top left, select "Select Mode: Face" from the 3 options, currently "Select Mode: Vertex"
+		Select a single large face on the board surface, somewhere near the center
+			It should highlight
+		Under the "Select" button at the top, choose "Select Similar -> Coplanar"
+			This should select all of the mesh faces on the board's face
+				They will be highlighted in orange
+	Unwrap the faces
+		With all of the board faces selected, type "U" and select "Unwrap Conformal"
+			Or click the "UV" button at the top, and select "Unwrap Conformal"
+	Apply the new Material you created to the selected faces
+		With the board faces still selected, select the new Material you created and click "Assign" at the bottom of the material list
+		To see the result, change the Viewport Shading to "Material Preview"
+			In the upper-right corer, select the "Viewport Shading: Material Preview" icon
+				There are 4 such icons, and the "Solid" option is probably selected
+		You should now see a distorted view of the labyrinth board on the mesh object
+	Clean up the UV mapping
+		Enter the "UV Editing" mode at the very top tab-bar
+		Rotate and stretch the UV mapping to fit the image well
+			Use the "Move", "Rotate", "Scale" and "Transform" tools on the left-hand side to align the mapping to the image
+			To rotate by fixed degrees, hold down the Control key while rotating
+				You will likely need to rotate by -90 degrees
+			The "Transform" tool is particularly helpful to align the edges of the UV map with the edges of the image
+			I haven't found a way to do this "perfectly", but I tried to align the holes as best I can
+		Once the UV mapping is fairly accurate, the object view on the right should show an accurate image mapping
+			Again, make sure "Viewport Shading: Material Preview" is selected in the upper right corner of the Viewport window
+	To see the final results, go back to "Layout" mode at the top tab-bar
+		The board should appear correct now, with the image just on the board face and nothing else
+	Save everything:
+		Save the Blender file with the normal File -> Save menu item
+			e.g. Labyrinth Board Mesh.blend
+		Export the object as a new .obj file:
+			Select File -> Export -> Wavefront (.obj)
+			Save the board_mesh.obj file in the "assets" folder of the MuJoCo model
+				Make sure the "UV Coordinates" option is selected under "Geometry" on the right when you export
+				Blender will also write out a corresponding .mtl file
+	You can make sure the .obj file looks correct in the Finder preview by selecting it and hitting spacebar
+		Rotate the object and make sure it is correct
+	Finally, reference the new .obj file in the MuJoCo MJCF XML file
+		You will need a <mesh>, <texture>, <material>, and <geom> object to create the mesh in MuJoCo
+	
+	NOTE: I used a labyrinth.png file with the holes draw to properly align the UV map to the image,
+	but then I generated a new labyrinth.png file WIHOUT THE HOLES DRAWN so that any slight misalignment
+	between the UV map and the image does not show any black hole edges.
+	You don't need to do any re-mapping - just update the labyrinth.jpg file and all of the UV mapping that is
+	stored in the .obj file remains the same. This looks excellent!
+
+		
