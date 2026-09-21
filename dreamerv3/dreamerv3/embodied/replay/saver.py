@@ -23,7 +23,7 @@ class Saver:
         buffer = self.buffers[worker]
         buffer.append(step)
         if buffer.length >= self.chunks:
-            print("Saving chunk")
+            # print("Saving chunk")
             self.buffers[worker] = buffer.successor = chunklib.Chunk(self.chunks)
             self.promises.append(self.workers.submit(buffer.save, self.directory))
             for promise in [x for x in self.promises if x.done()]:
