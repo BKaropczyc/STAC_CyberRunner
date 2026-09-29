@@ -35,6 +35,7 @@
     <option gravity="0 0 -980.665" timestep="0.0005" integrator="implicitfast"/>   <!-- Gravity units are cm/s^2 -->
 
     <visual>
+        <global offwidth="1280" offheight="720"/>
         <headlight ambient="0.3 0.3 0.3" diffuse="0.3 0.3 0.3" specular="0.3 0.3 0.3"/>
         <quality shadowsize="8192"/>
     </visual>
