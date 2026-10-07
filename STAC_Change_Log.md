@@ -1,5 +1,12 @@
 # Change Log
 
+
+## v0.1.2
+
+### Changed
+    - Moved MuJoCo into sim_publisher.py so the ROS node owns the simulation loop.
+    - Subscribed to the topic for control messages to apply the latest commands to the actuators.
+
 ## v0.1.1 (2026-9-26)
 
 ### Added
