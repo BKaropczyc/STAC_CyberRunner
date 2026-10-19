@@ -57,10 +57,13 @@ class CyberrunnerGym(gym.Env):
                                                         # TODO: Check these measurements!
         shared = get_package_share_directory("cyberrunner_dreamer")
         self.p = LinearPath.load(os.path.join(shared, "path_0002_hard.pkl"))
+        # Uncomment for simulation training
+        #self._mark_holes(layout["holes"], radius=0.007)
         # Uncomment the following line to have the robot play BACKWARDS from the end of the maze to the beginning
         # self.p.points = self.p.points[::-1]
         self.cheat_threshold = int(0.057 / self.p.distance)
 
+        # will render when we add that argument.
         if render_mode is not None:
             self.renderer = LayoutRenderer(layout, scale=1500)    # Can add path=self.p to render the off-path regions
 
@@ -467,3 +470,20 @@ class CyberrunnerGym(gym.Env):
         terminated = bool(reason) and is_terminal
         truncated = bool(reason) and not is_terminal
         return terminated, truncated, reason
+
+    def _mark_holes(self, holes, radius):
+            """Mark lookup cells near hole centers as off path"""
+            # 2d lookup array
+            lookup = self.p.closest_idx
+            # Generate indices from zero up to row/col size
+            rows, cols = np.ogrid[:lookup.shape[0], :lookup.shape[1]]
+    
+            # board coordinates of the lookup cells
+            # cols[i]/rows[i] * neighboring positions in the lookup grid
+            xs = cols * self.p.distance # 0.0002 m
+            ys = rows * self.p.distance
+
+            for hole_x, hole_y in holes:
+                # Checking if cell position is within straighline distance 
+                inside_hole = (xs - hole_x) ** 2 + (ys - hole_y) ** 2 <= radius ** 2
+                lookup[inside_hole] = -1

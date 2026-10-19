@@ -1,5 +1,11 @@
 # Change Log
 
+## v0.1.3
+
+### Added
+    - Function to mark hole regions as offpath for training in simulation, required due to the mujoco convex constraint
+    - select markers simulation code.
+
 
 ## v0.1.2
 

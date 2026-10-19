@@ -49,7 +49,8 @@ class ImageSubscriber(Node):
 
         # Read in the markers.csv data generated during the "select_markers" calibration step
         share = get_package_share_directory("cyberrunner_state_estimation")
-        markers = np.loadtxt(os.path.join(share, "markers.csv"), delimiter=",")
+        #markers = np.loadtxt(os.path.join(share, "markers.csv"), delimiter=",")
+        markers = np.loadtxt(os.path.join(share, "sim_markers.csv"), delimiter=",")
 
         # Create the measurements object, which does the heavy lifting of state estimation
         self.measurements = Measurements(

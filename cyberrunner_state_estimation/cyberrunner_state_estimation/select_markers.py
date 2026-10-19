@@ -52,7 +52,7 @@ class MarkerSelector(Node):
         if len(self.markers) == 8:
             shared = get_package_share_directory("cyberrunner_state_estimation")
             np.savetxt(
-                os.path.join(shared, "markers.csv"),
+                os.path.join(shared, "sim_markers.csv"),
                 np.asarray(self.markers),
                 delimiter=",",
             )
