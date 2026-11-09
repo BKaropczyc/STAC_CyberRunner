@@ -59,13 +59,14 @@ class CyberrunnerGym(gym.Env):
         self.p = LinearPath.load(os.path.join(shared, "path_0002_hard.pkl"))
         # Uncomment for simulation training
         #self._mark_holes(layout["holes"], radius=0.007)
+        self._mark_holes(layout['holes'], radius=0.0060)
         # Uncomment the following line to have the robot play BACKWARDS from the end of the maze to the beginning
         # self.p.points = self.p.points[::-1]
         self.cheat_threshold = int(0.057 / self.p.distance)
 
         # will render when we add that argument.
         if render_mode is not None:
-            self.renderer = LayoutRenderer(layout, scale=1500)    # Can add path=self.p to render the off-path regions
+            self.renderer = LayoutRenderer(layout, scale=1500, path=self.p)    # Can add path=self.p to render the off-path regions
 
         self.prev_path_pos = 0                  # The most recent position achieved along the path to the goal
         self.num_wait_steps = num_wait_steps    # Number of steps to wait before starting a new episode

@@ -37,7 +37,7 @@
     <visual>
         <global offwidth="1280" offheight="720"/>
         <headlight ambient="0.3 0.3 0.3" diffuse="0.3 0.3 0.3" specular="0.3 0.3 0.3"/>
-        <quality shadowsize="8192"/>
+        <quality shadowsize="4096"/>
     </visual>
 
     <worldbody>
@@ -101,7 +101,7 @@
     </worldbody>
 
     <actuator>
-        <velocity name="tilt_y" joint="x_rot" gear="1500" ctrllimited="true" ctrlrange="-4000 4000" kv="55"/>
-        <velocity name="tilt_x" joint="y_rot" gear="1500" ctrllimited="true" ctrlrange="-4000 4000" kv="55"/>
+        <velocity name="tilt_y" joint="x_rot" gear="300" ctrllimited="true" ctrlrange="-200 200" kv="10"/>
+        <velocity name="tilt_x" joint="y_rot" gear="300" ctrllimited="true" ctrlrange="-200 200" kv="10"/>
     </actuator>
 </mujoco>
