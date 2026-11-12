@@ -52,15 +52,15 @@ class Measurements:
                 self.anim_3d_top = Anim3d(viewpoint="top")
 
         # Debugging options
-        #if Measurements.SHOW_UNDISTORTED_FRAME:
+        if Measurements.SHOW_UNDISTORTED_FRAME:
             # Calculate the maps to undistort the image
-         #   map1, map2 = cv2.initUndistortRectifyMap(self.plate_pose.K,
-         #                                            self.plate_pose.dist_coeff,
-         #                                            R=None,
-         #                                            newCameraMatrix=None,
-         #                                            size=(640, 400),
-         #                                            m1type=cv2.CV_32FC1)
-         #   self.undistort_maps = (map1, map2)
+            map1, map2 = cv2.initUndistortRectifyMap(self.plate_pose.K,
+                                                     self.plate_pose.dist_coeff,
+                                                     R=None,
+                                                     newCameraMatrix=None,
+                                                     size=(640, 400),
+                                                     m1type=cv2.CV_32FC1)
+            self.undistort_maps = (map1, map2)
 
         if Measurements.SHOW_PATH:
             # Load the maze path waypoint coordinates
@@ -110,9 +110,8 @@ class Measurements:
 
         if Measurements.SHOW_UNDISTORTED_FRAME:
             # Display the undistorted frame
-            #map1, map2 = self.undistort_maps
-            #undistorted_img = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR)
-            undistorted_img = frame
+            map1, map2 = self.undistort_maps
+            undistorted_img = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR)
             cv2.imshow("Undistorted Frame", undistorted_img)
             cv2.waitKey(1)
 

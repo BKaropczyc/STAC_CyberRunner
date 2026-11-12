@@ -3,7 +3,7 @@ import random
 import cv2
 import time
 
-model = mujoco.MjModel.from_xml_path("cyberrunner_mujoco/cyberrunner.xml")
+model = mujoco.MjModel.from_xml_path("cyberrunner.xml")
 data = mujoco.MjData(model)
 renderer = mujoco.Renderer(model, height=360, width=640)
 

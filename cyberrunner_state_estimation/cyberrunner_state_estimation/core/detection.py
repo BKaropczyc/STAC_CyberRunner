@@ -31,7 +31,7 @@ class Detector:
     # Parameters for detecting the ball
     BALL_CROP_SIZE = 50           # The side length of the cropping square when detecting the ball
     BALL_HSV_RANGES = (           # Masking parameters used when detecting the ball
-        (89, 121),   # (minHue, maxHue)
+        (50, 121),   # (minHue, maxHue)
         (155, 255),  # (minSat, maxSat)
         (15, 255)    # (minVal, maxVal)
     )

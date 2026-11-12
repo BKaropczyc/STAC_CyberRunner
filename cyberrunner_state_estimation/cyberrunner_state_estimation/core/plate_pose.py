@@ -98,8 +98,7 @@ class PlatePoseEstimator:
 
         # Store these camera parameters as instance vars
         self.K = camera_matrix
-        #self.dist_coeff = dist_coeff
-        self.dist_coeff = None
+        self.dist_coeff = dist_coeff
 
         # Declare other instance vars for transformations
         self.T__W_M = None       # The World->Maze transform

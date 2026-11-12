@@ -77,7 +77,8 @@ Path("cyberrunner_walls.xml").write_text(walls_xml)
 # ----------------------------------------------------------------------------------------------------------------------
 # Board texture image
 # Supersample the image by 100 (in mm)
-img = Image.new("RGB", (276 * 100, 231 * 100), color=(210, 180, 140))
+board_color=(231, 220, 191)
+img = Image.new("RGB", (276 * 100, 231 * 100), color=board_color)
 draw = ImageDraw.Draw(img)
 
 # Draws the holes
@@ -122,15 +123,17 @@ img.save(assets_path / "labyrinth.png")
 # ----------------------------------------------------------------------------------------------------------------------
 # Outer Frame Markers
 # Supersample the image by 100 (in mm)
-img = Image.new("RGB", (270 * 100, 270 * 100), color=(210, 180, 140))
+frame_color=(231, 224, 206)
+markers_color=(22, 103, 164)
+img = Image.new("RGB", (270 * 100, 270 * 100), color=frame_color)
 draw = ImageDraw.Draw(img)
 
-# Draws the blue markers
+# Draw the blue markers
 half_width = 6.2
 half_height = 3.4
 x_center = 135
 y_center = 209
-draw.ellipse(((x_center - half_width) * 100, (y_center - half_height) * 100, (x_center + half_width) * 100, (y_center + half_height) * 100), fill="blue")
+draw.ellipse(((x_center - half_width) * 100, (y_center - half_height) * 100, (x_center + half_width) * 100, (y_center + half_height) * 100), fill=markers_color)
 
 # Resize the image to 10X the final size for higher quality
 # MuJoCo will scale the texture image to the correct size
@@ -139,21 +142,21 @@ img = img.resize((270 * 10, 270 * 10), Image.Resampling.LANCZOS)
 # Save the result
 img.save(assets_path / "outer_markers_up.png")
 
-img = Image.new("RGB", (270 * 100, 270 * 100), color=(210, 180, 140))
+img = Image.new("RGB", (270 * 100, 270 * 100), color=frame_color)
 draw = ImageDraw.Draw(img)
 y_center = 61
-draw.ellipse(((x_center - half_width) * 100, (y_center - half_height) * 100, (x_center + half_width) * 100, (y_center + half_height) * 100), fill="blue")
+draw.ellipse(((x_center - half_width) * 100, (y_center - half_height) * 100, (x_center + half_width) * 100, (y_center + half_height) * 100), fill=markers_color)
 img = img.resize((270 * 10, 270 * 10), Image.Resampling.LANCZOS)
 img.save(assets_path / "outer_markers_down.png")
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Inner Frame Markers
 # Supersample the image by 100 (in mm)
-img = Image.new("RGB", (100 * 100, 100 * 100), color=(210, 180, 140))
+img = Image.new("RGB", (100 * 100, 100 * 100), color=frame_color)
 draw = ImageDraw.Draw(img)
 
-# Draws the blue markers
-draw.circle((50 * 100, 50 * 100), 49 * 100, fill='blue')
+# Draw the blue markers
+draw.circle((50 * 100, 50 * 100), 49 * 100, fill=markers_color)
 
 # Resize the image to 10X the final size for higher quality
 # MuJoCo will scale the texture image to the correct size

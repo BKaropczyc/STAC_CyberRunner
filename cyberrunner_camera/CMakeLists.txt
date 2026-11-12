@@ -29,6 +29,7 @@ find_package(rclpy REQUIRED)
 install(PROGRAMS
   scripts/video_publisher.py
   scripts/cam_publisher.py
+  scripts/sim_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

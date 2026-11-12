@@ -27,7 +27,7 @@ class HsvCalibration(Node):
 
         #Instance of Measurements, used to mask/separate the labrinth board and the background
         share = get_package_share_directory("cyberrunner_state_estimation")# Location of the markers file
-        markers = np.loadtxt(os.path.join(share, "sim_markers.csv"), delimiter=",") #Loading in the markers file
+        markers = np.loadtxt(os.path.join(share, "markers.csv"), delimiter=",") #Loading in the markers file
         self.mask_m = Measurements(markers=markers, show_3d_anim=False)
 
         # Create a window for the trackbars

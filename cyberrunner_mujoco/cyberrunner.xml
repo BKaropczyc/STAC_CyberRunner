@@ -3,14 +3,14 @@
     <asset>
         <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
 
-        <material name="frame" class="frame" rgba=".8235 0.706 0.549 1"/>
+        <material name="frame" class="frame" rgba="0.9058 0.8784 0.8078 1"/>
         <material name="wall" rgba="0.285 0.151 0.00 1.0"/>
-        <material name="ball" rgba="0.169 0.597 0.950 1"/>
+        <material name="ball" rgba="0.137 0.510 0.745 1"/>
 
-        <texture name="outer_markers" type="cube" fileup="assets/outer_markers_up.png" filedown="assets/outer_markers_down.png" rgb1=".8235 0.706 0.549"/>
+        <texture name="outer_markers" type="cube" fileup="assets/outer_markers_up.png" filedown="assets/outer_markers_down.png" rgb1="0.9058 0.8784 0.8078"/>
         <material name="outer_markers" class="frame" texture="outer_markers" texuniform="true"/>
 
-        <texture name="inner_markers" type="cube" filefront="assets/inner_markers_front.png" rgb1=".8235 0.706 0.549"/>
+        <texture name="inner_markers" type="cube" filefront="assets/inner_markers_front.png" rgb1="0.9058 0.8784 0.8078"/>
         <material name="inner_markers" class="frame" texture="inner_markers"/>
 
         <mesh name="board_mesh" file="assets/board_mesh.obj" scale="0.1 0.1 0.1" inertia="exact"/>
@@ -30,22 +30,28 @@
         <default class="walls">
             <geom material="wall" density="1.04"/>  <!-- Approximate density of ABS plastic. Not sure what type of plastic the walls are made from. -->
         </default>
+        <default class="lights">
+        	<light type="directional" diffuse="0.5 0.5 0.5" specular="0 0 0" castshadow="false"/>
+        </default>
     </default>
 
     <option gravity="0 0 -980.665" timestep="0.0005" integrator="implicitfast"/>   <!-- Gravity units are cm/s^2 -->
 
     <visual>
-        <global offwidth="1280" offheight="720"/>
-        <headlight ambient="0.3 0.3 0.3" diffuse="0.3 0.3 0.3" specular="0.3 0.3 0.3"/>
+        <headlight ambient="0.45 0.45 0.45" diffuse="0.55 0.55 0.55" specular="0.3 0.3 0.3"/>
         <quality shadowsize="4096"/>
     </visual>
 
     <worldbody>
-        <light diffuse="0.5 0.5 0.5" specular="0.3 0.3 0.3" pos="16.2 13.5 200" dir="0 0 -1"/>
+        <light class="lights" dir="1 0 0"/>
+        <light class="lights" dir="-1 0 0"/>
+        <light class="lights" dir="0 1 0"/>
+        <light class="lights" dir="0 -1 0"/>
+
         <geom type="plane" pos="0 0 -9.3" size="0 0 0.1" rgba="1 1 1 1"/>
 
         <camera name="intrinsic_cam" resolution="1280 720" sensorsize=".576 .360" focalpixel="396.115 395.558" principalpixel="2.914 -4.557" pos="16.6 14.3 25" zaxis="0 0 1"/>
-        <camera name="fov_camera" resolution="1280 720" fovy="75" pos="16.6 14.3 25" zaxis="0 0 1"/>
+        <camera name="fov_camera" resolution="1280 720" fovy="68" pos="16.6 14.3 25" zaxis="0 0 1"/>
 
         <body name="outer_frame" childclass="frame">
             <!-- Outer Frame -->
@@ -87,6 +93,7 @@
                         <body name="walls" childclass="walls">
                             <include file="cyberrunner_walls.xml"/>
                         </body>
+                        <geom type="box" pos="13.75 11.5 -0.2" size="13.75 11.5 0.1" rgba="0.2 0.2 0.2 1"/>
                     </body>
                 </body>
             </body>
@@ -101,7 +108,7 @@
     </worldbody>
 
     <actuator>
-        <velocity name="tilt_y" joint="x_rot" gear="300" ctrllimited="true" ctrlrange="-200 200" kv="10"/>
-        <velocity name="tilt_x" joint="y_rot" gear="300" ctrllimited="true" ctrlrange="-200 200" kv="10"/>
+        <velocity name="tilt_y" joint="x_rot" gear="300" ctrllimited="true" ctrlrange="-1000 1000" kv="10"/>
+        <velocity name="tilt_x" joint="y_rot" gear="300" ctrllimited="true" ctrlrange="-1000 1000" kv="10"/>
     </actuator>
 </mujoco>

@@ -16,36 +16,36 @@ from cyberrunner_interfaces.srv import DynamixelReset
 class SimMaster(Node):
     def __init__(self, display=True):
         super().__init__("cyberrunner_sim")
+
+        # MuJoCo and other instance variables
         self.model = mujoco.MjModel.from_xml_path("cyberrunner_mujoco/cyberrunner.xml")
         self.data = mujoco.MjData(self.model)
-
-        self.command = (0.0, 0.0)
-        self.lock = threading.Lock()
-        self.reset = self.create_service(DynamixelReset, "cyberrunner_dynamixel/reset", self.reset_ball)
-
-        # Publishing location
-        self.publisher = self.create_publisher(Image, "cyberrunner_camera/image", 1)
-
-        # Call spin() on this node in a separate thread
-        thread = threading.Thread(target=rclpy.spin, args=(self,), daemon=True)
-        thread.start()
-
         self.renderer = mujoco.Renderer(self.model, height=360, width=640)
+        self.lock = threading.Lock()    # Ensure exclusive access to MuJoCo data
         self.br = CvBridge()
         
         # Keep track of how quickly we're publishing images
         frame_count = 0
         previous = time.time()
 
+        # Publishing location
+        self.publisher = self.create_publisher(Image, "cyberrunner_camera/image", 1)
+
         # Subscribe to the control message topic, call the callback function to get control commands
         self.subscription = self.create_subscription(DynamixelVel, "cyberrunner_dynamixel/cmd", self.control_callback, 1)
+        self.command = (0.0, 0.0)
+
+        # Create a 'reset' service, which will reset the MuJoCo environment
+        self.reset = self.create_service(DynamixelReset, "cyberrunner_dynamixel/reset", self.reset_callback)
+
+        # Call spin() on this node in a separate thread
+        thread = threading.Thread(target=rclpy.spin, args=(self,), daemon=True)
+        thread.start()
 
         while True:
             with self.lock:
                 # Apply dreamerV3 requested commands
-                self.data.ctrl[0] = self.command[0]
-                self.data.ctrl[1] = self.command[1]
-                print(self.data.ctrl[:])
+                self.data.ctrl[:] = self.command
 
                 # Apply above actuator inputs
                 mujoco.mj_step(self.model, self.data, nstep=36)
@@ -67,9 +67,9 @@ class SimMaster(Node):
 
             # Display the image, if desired
             if display:
-                cv2.imshow("Camera", frame)
-                #cv2.waitKey(1)
+                cv2.imshow("MuJoCo", frame)
                 cv2.pollKey()
+
             frame_count += 1
 
             # Check the image processing speed
@@ -77,8 +77,7 @@ class SimMaster(Node):
             dur = now - previous
             if dur >= 2.0:     # Calculate the fps every ~2 seconds
                 fps = frame_count / dur
-                #if fps < 55.0:
-                if fps:
+                if fps < 55.0:
                     print(f"WARNING: Slow image generation: {fps:0.2f} fps")
 
                 # Reset our count
@@ -90,9 +89,14 @@ class SimMaster(Node):
         with self.lock:
             self.command = (msg.vel_2, msg.vel_1)
 
-    def reset_ball(self, request, response):
+    # Callback function for the reset service
+    def reset_callback(self, request, response):
+        # Reset the MuJoCo environment
         with self.lock:
             mujoco.mj_resetData(self.model, self.data)
+            mujoco.mj_forward(self.model, self.data)
+
+        # Return success
         response.success = 1
         return response
 
@@ -108,6 +112,7 @@ def main(args=None):
     rclpy.init(args=args)
     _ = SimMaster(display)
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()
